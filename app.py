@@ -1,7 +1,8 @@
 import fitz, pandas as pd, os, io
 import streamlit as st
+from openpyxl.styles import PatternFill, Font
 
-st.set_page_config(page_title="Monitoring Pramita V10 FINAL", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Monitoring Pramita V11 TOP10", layout="wide", page_icon="📊")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 
 PIC_HIDDEN_LIST = ["NARINDRA NATA KUNTHARA", "YOHANA DEWI RATIH"]
@@ -11,8 +12,7 @@ BULAN_FULL = {
     "FEBR": "FEBRUARI", "FEB": "FEBRUARI",
     "MARET": "MARET", "MAR": "MARET",
     "APRIL": "APRIL", "APR": "APRIL",
-    "MEI": "MEI",
-    "JUNI": "JUNI", "JUN": "JUNI",
+    "MEI": "MEI", "JUNI": "JUNI", "JUN": "JUNI",
     "JULI": "JULI", "JUL": "JULI",
     "AGUS": "AGUSTUS", "AGU": "AGUSTUS",
     "SEPT": "SEPTEMBER", "SEP": "SEPTEMBER",
@@ -84,7 +84,6 @@ def parse_pdf(pdf_path, periode_label):
                             cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]); sultan_total=to_int(nums[4]); sultan_psn=to_int(nums[7]); total_omzet=to_int(nums[8]); total_psn=to_int(nums[10])
                         else:
                             cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]) if len(nums)>3 else 0; sultan_total=to_int(nums[4]) if len(nums)>4 else 0; sultan_psn=to_int(nums[7]) if len(nums)>7 else 0; total_omzet=cik_total+sultan_total; total_psn=cik_psn+sultan_psn
-                            if len(nums)>=12: total_omzet=to_int(nums[8]); total_psn=to_int(nums[10])
                         parsed.append({"Periode":normalize_periode(periode_label),"PIC":pic,"Kode_Dokter":kode,"Nama_Dokter":nama[:60],"CD_Omzet":cik_total,"CD_Pasien":cik_psn,"SA_Omzet":sultan_total,"SA_Pasien":sultan_psn,"Total_Omzet":total_omzet,"Total_Pasien":total_psn})
                     i=j-1
                 i+=1
@@ -132,17 +131,16 @@ def parse_pdf(pdf_path, periode_label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-st.title("📊 Monitoring Pramita V10 FINAL - No Urut 1,2,3")
+st.title("📊 Monitoring Pramita V11 - TOP 10 Highlight")
 
 with st.sidebar:
     st.header("📂 Upload PDF")
-    periode=st.text_input("Periode (cth: SEPTEMBER-2026)", value="OKTOBER-2026")
+    periode=st.text_input("Periode", value="OKTOBER-2026")
     up=st.file_uploader("Upload PDF", type=["pdf"])
     if up:
         open("temp.pdf","wb").write(up.getbuffer())
         df_new=parse_pdf("temp.pdf", periode)
         st.success(f"Terbaca {len(df_new)} dokter -> {normalize_periode(periode)}")
-        st.dataframe(df_new.head(3))
         if st.button("💾 Simpan"):
             if os.path.exists(DB_FILE):
                 old=pd.read_excel(DB_FILE)
@@ -151,18 +149,6 @@ with st.sidebar:
                 all_df=pd.concat([old,df_new], ignore_index=True)
             else: all_df=df_new
             all_df.to_excel(DB_FILE,index=False); st.success("Tersimpan!"); st.rerun()
-    st.divider()
-    if os.path.exists(DB_FILE):
-        df_tmp=pd.read_excel(DB_FILE)
-        if not df_tmp.empty:
-            df_tmp["Periode"] = df_tmp["Periode"].apply(normalize_periode)
-            df_tmp["SortDate"] = df_tmp["Periode"].apply(parse_date)
-            sorted_p = df_tmp.sort_values("SortDate")["Periode"].unique()
-            del_per=st.selectbox("Hapus periode", sorted_p)
-            if st.button(f"Hapus {del_per}"):
-                df_del=df_tmp[df_tmp["Periode"]!=del_per]; df_del.drop(columns=["SortDate"]).to_excel(DB_FILE,index=False); st.rerun()
-            if st.button("⚠️ HAPUS SEMUA"):
-                os.remove(DB_FILE); st.rerun()
 
 if not os.path.exists(DB_FILE): st.info("Upload dulu"); st.stop()
 df=pd.read_excel(DB_FILE)
@@ -173,10 +159,8 @@ df.drop(columns=["SortDate"]).to_excel(DB_FILE, index=False)
 df["SortDate"] = df["Periode"].apply(parse_date)
 df = df.sort_values("SortDate")
 
-# LOGIKA HIDE BERDASARKAN FILE TERAKHIR
 latest_periode = df.sort_values("SortDate")["Periode"].iloc[-1]
 latest_pics_upper = df[df["Periode"]==latest_periode]["PIC"].astype(str).str.upper().unique().tolist()
-
 hidden_active = [t for t in PIC_HIDDEN_LIST if any(t in lp or lp in t for lp in latest_pics_upper)]
 pics_to_hide_real = [p for p in df["PIC"].unique() if any(h in str(p).upper() for h in hidden_active)]
 
@@ -187,28 +171,21 @@ with st.sidebar:
     sel_periode=st.multiselect("Pilih Periode", period_options, default=period_options)
     sel_pic=st.selectbox("PIC", ["Semua"]+sorted(df["PIC"].dropna().unique().tolist()))
     sort_by=st.selectbox("Urut Ranking", ["Total_Omzet","Total_Pasien","CD_Omzet","SA_Omzet"])
-    st.divider()
-    st.caption(f"File terakhir: {latest_periode}")
     if pics_to_hide_real:
-        st.warning(f"🙈 Hide Aktif: {', '.join(pics_to_hide_real)}")
-    else:
-        st.success("✅ Tidak ada PIC disembunyikan")
+        st.warning(f"🙈 Hide: {', '.join(pics_to_hide_real)}")
 
 df_f=df[df["Periode"].isin(sel_periode)] if sel_periode else df
 if sel_pic!="Semua": df_f=df_f[df_f["PIC"]==sel_pic]
 
 c1,c2,c3=st.columns(3)
 c1.metric("Total Omzet (Semua PIC)", f"Rp {df_f['Total_Omzet'].sum():,}")
-c2.metric("Total Pasien (Semua PIC)", f"{df_f['Total_Pasien'].sum():,}")
-c3.metric("Dokter Unik", f"{df_f['Kode_Dokter'].nunique()}")
+c2.metric("Total Pasien", f"{df_f['Total_Pasien'].sum():,}")
+c3.metric("Dokter", f"{df_f['Kode_Dokter'].nunique()}")
 
-# RANKING TANPA PIC HIDDEN
 df_rank_base = df_f[~df_f["PIC"].isin(pics_to_hide_real)] if pics_to_hide_real else df_f
-
 if len(sel_periode) > 1:
     df_rank = df_rank_base.groupby(["Kode_Dokter","Nama_Dokter"], as_index=False).agg(
-        PIC=("PIC","first"),
-        CD_Omzet=("CD_Omzet","sum"), CD_Pasien=("CD_Pasien","sum"),
+        PIC=("PIC","first"), CD_Omzet=("CD_Omzet","sum"), CD_Pasien=("CD_Pasien","sum"),
         SA_Omzet=("SA_Omzet","sum"), SA_Pasien=("SA_Pasien","sum"),
         Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum"),
         Jumlah_Bulan=("Periode","nunique")
@@ -216,24 +193,41 @@ if len(sel_periode) > 1:
 else:
     df_rank = df_rank_base.sort_values(by=sort_by, ascending=False)
 
-# --- FIX UTAMA NO URUT 1,2,3 ---
 df_rank = df_rank.reset_index(drop=True)
 df_rank.insert(0, "No", range(1, len(df_rank)+1))
 if "SortDate" in df_rank.columns:
     df_rank = df_rank.drop(columns=["SortDate"])
 
-st.subheader(f"🏆 Ranking {sort_by} - {len(df_rank)} Dokter")
-st.dataframe(df_rank, use_container_width=True, height=550, hide_index=True)
+# STYLE TOP 10
+def highlight_top10(row):
+    idx = row.name
+    if idx < 3: # 1-3 Emas
+        return ['font-weight: bold; background-color: #FFF176; color: black'] * len(row)
+    elif idx < 10: # 4-10 Hijau
+        return ['font-weight: bold; background-color: #C8E6C9; color: black'] * len(row)
+    else:
+        return [''] * len(row)
 
+st.subheader(f"🏆 Ranking {sort_by} - TOP 10 Tebal & Berwarna")
+st.markdown("🥇 **No 1-3 = Kuning Emas (Juara)** | 🥈 **No 4-10 = Hijau (Top 10)**")
+st.dataframe(df_rank.style.apply(highlight_top10, axis=1), use_container_width=True, height=600, hide_index=True)
+
+# Export Excel dengan warna juga
 buf=io.BytesIO()
-with pd.ExcelWriter(buf, engine='openpyxl') as w:
-    df_rank.to_excel(w, index=False, sheet_name='Ranking_No_Urut')
-st.download_button("📥 Export Excel Ranking (No 1,2,3)", data=buf.getvalue(), file_name=f"Ranking_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+    df_rank.to_excel(writer, index=False, sheet_name='Ranking_TOP10')
+    ws = writer.sheets['Ranking_TOP10']
+    # Warna di Excel
+    fill_gold = PatternFill(start_color="FFF176", end_color="FFF176", fill_type="solid")
+    fill_green = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")
+    font_bold = Font(bold=True)
+    for r_idx in range(2, min(12, len(df_rank)+2)): # baris 2-11 = top 10
+        for c in range(1, len(df_rank.columns)+1):
+            cell = ws.cell(row=r_idx, column=c)
+            cell.font = font_bold
+            if r_idx <= 4: # 1-3
+                cell.fill = fill_gold
+            else:
+                cell.fill = fill_green
 
-st.divider()
-st.subheader("📅 Trend MoM Urut Januari-Desember")
-trend = df.groupby("Periode", as_index=False).agg(Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum"), Kode_Dokter=("Kode_Dokter","nunique"))
-trend["SortDate"] = trend["Periode"].apply(parse_date)
-trend = trend.sort_values("SortDate")
-st.line_chart(trend.set_index("Periode")[["Total_Omzet"]])
-st.dataframe(trend[["Periode","Total_Omzet","Total_Pasien","Kode_Dokter"]].reset_index(drop=True), use_container_width=True, hide_index=True)
+st.download_button("📥 Export Excel TOP 10 Berwarna", data=buf.getvalue(), file_name=f"Ranking_TOP10_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
