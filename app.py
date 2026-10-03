@@ -1,32 +1,42 @@
 import fitz, pandas as pd, os, io
 import streamlit as st
 
-st.set_page_config(page_title="Monitoring Pramita V6", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Monitoring Pramita V7 Full Bulan", layout="wide", page_icon="📊")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 
-# Mapping biar JANU,FEBR,Agus,Maret dll kebaca semua
-BULAN_MAP = {
-    "JANU":1, "JAN":1,
-    "FEBR":2, "FEB":2,
-    "MARET":3, "MARET-":3, "MAR":3,
-    "APRIL":4, "APR":4,
-    "MEI":5, "MEI-":5,
-    "JUNI":6, "JUN":6,
-    "JULI":7, "JUL":7,
-    "AGUS":8, "AGU":8, "AUG":8,
-    "SEPT":9, "SEP":9,
-    "OKTO":10, "OKT":10, "OCT":10,
-    "NOPE":11, "NOV":11,
-    "DESE":12, "DES":12, "DEC":12
+BULAN_FULL = {
+    "JANU": "JANUARI", "JAN": "JANUARI",
+    "FEBR": "FEBRUARI", "FEB": "FEBRUARI",
+    "MARET": "MARET", "MAR": "MARET",
+    "APRIL": "APRIL", "APR": "APRIL",
+    "MEI": "MEI",
+    "JUNI": "JUNI", "JUN": "JUNI",
+    "JULI": "JULI", "JUL": "JULI",
+    "AGUS": "AGUSTUS", "AGU": "AGUSTUS", "AUG": "AGUSTUS",
+    "SEPT": "SEPTEMBER", "SEP": "SEPTEMBER",
+    "OKTO": "OKTOBER", "OKT": "OKTOBER", "OCT": "OKTOBER",
+    "NOPE": "NOVEMBER", "NOV": "NOVEMBER",
+    "DESE": "DESEMBER", "DES": "DESEMBER", "DEC": "DESEMBER"
 }
+BULAN_ANGKA = {"JANUARI":1,"FEBRUARI":2,"MARET":3,"APRIL":4,"MEI":5,"JUNI":6,"JULI":7,"AGUSTUS":8,"SEPTEMBER":9,"OKTOBER":10,"NOVEMBER":11,"DESEMBER":12}
+
+def normalize_periode(per_str):
+    try:
+        s = str(per_str).upper().strip()
+        # pisah bulan dan tahun
+        tahun = "".join([c for c in s if c.isdigit()])[-4:]
+        bulan_part = "".join([c for c in s if c.isalpha()])[:4]
+        full = BULAN_FULL.get(bulan_part, bulan_part)
+        return f"{full}-{tahun}" if tahun else full
+    except:
+        return per_str.upper()
 
 def parse_periode_to_date(per_str):
     try:
-        per = str(per_str).upper()
-        # ambil 4 huruf awal bulan
-        prefix = "".join([c for c in per if c.isalpha()])[:4]
-        bulan = BULAN_MAP.get(prefix, 1)
-        tahun = int("".join([c for c in per if c.isdigit()][-4:]))
+        norm = normalize_periode(per_str)
+        bulan_nama = norm.split("-")[0]
+        tahun = int(norm.split("-")[1])
+        bulan = BULAN_ANGKA.get(bulan_nama, 1)
         return pd.Timestamp(year=tahun, month=bulan, day=1)
     except:
         return pd.Timestamp(year=2026, month=1, day=1)
@@ -36,7 +46,7 @@ def to_int(s):
     except: return 0
 
 def parse_pdf(pdf_path, periode_label):
-    #... (pakai fungsi parse_pdf V5 yang kemarin sudah bisa baca Juni)...
+    # parser V6 (sudah support Juni)
     doc = fitz.open(pdf_path)
     parsed = []
     is_new_format=False
@@ -77,7 +87,7 @@ def parse_pdf(pdf_path, periode_label):
                         else:
                             cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]) if len(nums)>3 else 0; sultan_total=to_int(nums[4]) if len(nums)>4 else 0; sultan_psn=to_int(nums[7]) if len(nums)>7 else 0; total_omzet=cik_total+sultan_total; total_psn=cik_psn+sultan_psn
                             if len(nums)>=12: total_omzet=to_int(nums[8]); total_psn=to_int(nums[10])
-                        parsed.append({"Periode":periode_label,"PIC":pic,"Kode_Dokter":kode,"Nama_Dokter":nama[:60],"CD_Omzet":cik_total,"CD_Pasien":cik_psn,"SA_Omzet":sultan_total,"SA_Pasien":sultan_psn,"Total_Omzet":total_omzet,"Total_Pasien":total_psn})
+                        parsed.append({"Periode":normalize_periode(periode_label),"PIC":pic,"Kode_Dokter":kode,"Nama_Dokter":nama[:60],"CD_Omzet":cik_total,"CD_Pasien":cik_psn,"SA_Omzet":sultan_total,"SA_Pasien":sultan_psn,"Total_Omzet":total_omzet,"Total_Pasien":total_psn})
                     i=j-1
                 i+=1
     else:
@@ -103,7 +113,7 @@ def parse_pdf(pdf_path, periode_label):
                 if bln==-1: return None
                 nama=" ".join(after[:bln]); nums=[x for x in after[bln+1:] if x.replace('.','').replace(',','').isdigit()]
                 if len(nums)>=12:
-                    return {"Periode":periode_label,"PIC":pic.title(),"Kode_Dokter":kode,"Nama_Dokter":nama,"CD_Omzet":to_int(nums[0]),"CD_Pasien":to_int(nums[3]),"SA_Omzet":to_int(nums[4]),"SA_Pasien":to_int(nums[7]),"Total_Omzet":to_int(nums[8]),"Total_Pasien":to_int(nums[10])}
+                    return {"Periode":normalize_periode(periode_label),"PIC":pic.title(),"Kode_Dokter":kode,"Nama_Dokter":nama,"CD_Omzet":to_int(nums[0]),"CD_Pasien":to_int(nums[3]),"SA_Omzet":to_int(nums[4]),"SA_Pasien":to_int(nums[7]),"Total_Omzet":to_int(nums[8]),"Total_Pasien":to_int(nums[10])}
                 return None
             for line in lines:
                 line=line.strip()
@@ -124,97 +134,78 @@ def parse_pdf(pdf_path, periode_label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-st.title("📊 Monitoring Pramita V6 - Urut Bulan Otomatis")
+st.title("📊 Monitoring Pramita V7 - Nama Bulan Full")
 
 with st.sidebar:
     st.header("📂 Upload")
-    periode=st.text_input("Periode (JANU-2026, FEBR-2026, dst)", value="OKTO-2026")
+    periode=st.text_input("Periode", value="OKTOBER-2026")
+    st.caption("Ketik bebas: JANU, FEBR, AGUS akan otomatis jadi JANUARI, FEBRUARI, AGUSTUS")
     up=st.file_uploader("Upload PDF", type=["pdf"])
     if up:
         open("temp.pdf","wb").write(up.getbuffer())
-        df_new=parse_pdf("temp.pdf", periode.upper())
-        st.success(f"Terbaca {len(df_new)} dokter")
+        df_new=parse_pdf("temp.pdf", periode)
+        st.success(f"Terbaca {len(df_new)} dokter -> {normalize_periode(periode)}")
         if len(df_new)>0:
-            st.dataframe(df_new.head(10))
+            st.dataframe(df_new.head(5))
             if st.button("💾 Simpan"):
                 if os.path.exists(DB_FILE):
-                    old=pd.read_excel(DB_FILE); old=old[old["Periode"]!=periode.upper()]
+                    old=pd.read_excel(DB_FILE)
+                    # Normalisasi data lama juga
+                    old["Periode"] = old["Periode"].apply(normalize_periode)
+                    old=old[old["Periode"]!=normalize_periode(periode)]
                     all_df=pd.concat([old,df_new], ignore_index=True)
                 else: all_df=df_new
                 all_df.to_excel(DB_FILE,index=False); st.success("Tersimpan!"); st.rerun()
-    st.divider()
-    st.header("🗑️ Hapus Data")
-    if os.path.exists(DB_FILE):
-        df_tmp=pd.read_excel(DB_FILE)
-        if not df_tmp.empty:
-            # Urutkan pilihan hapus juga Jan-Des
-            df_tmp["SortDate"] = df_tmp["Periode"].apply(parse_periode_to_date)
-            sorted_periods = df_tmp.sort_values("SortDate")["Periode"].unique()
-            del_per=st.selectbox("Hapus periode", sorted_periods)
-            if st.button(f"Hapus {del_per}"):
-                df_del=df_tmp[df_tmp["Periode"]!=del_per]; df_del.to_excel(DB_FILE,index=False); st.rerun()
-            if st.button("⚠️ HAPUS SEMUA"):
-                os.remove(DB_FILE); st.rerun()
 
 if not os.path.exists(DB_FILE): st.info("Upload dulu"); st.stop()
 df=pd.read_excel(DB_FILE)
 
-# Buat kolom tanggal untuk sorting
+# AUTO FIX: Normalisasi semua periode lama yang masih JANU,FEBR,Agus -> jadi FULL
+df["Periode"] = df["Periode"].apply(normalize_periode)
+df["SortDate"] = df["Periode"].apply(parse_periode_to_date)
+df = df.sort_values("SortDate")
+# Simpan balik biar permanen full
+df.drop(columns=["SortDate"]).to_excel(DB_FILE, index=False)
+
 df["SortDate"] = df["Periode"].apply(parse_periode_to_date)
 df = df.sort_values("SortDate")
 
 with st.sidebar:
     st.divider()
     st.header("🔎 Filter Ranking")
-    # Urutkan pilihan filter Jan-Des juga
     period_options = df.sort_values("SortDate")["Periode"].unique().tolist()
     sel_periode=st.multiselect("Pilih Periode", period_options, default=period_options)
     sel_pic=st.selectbox("PIC", ["Semua"]+sorted(df["PIC"].dropna().unique().tolist()))
-    sort_by=st.selectbox("Urut Ranking", ["Total_Omzet","Total_Pasien","CD_Omzet","SA_Omzet"])
+    sort_by=st.selectbox("Urut Ranking", ["Total_Omzet","Total_Pasien"])
 
 df_f=df[df["Periode"].isin(sel_periode)] if sel_periode else df
 if sel_pic!="Semua": df_f=df_f[df_f["PIC"]==sel_pic]
 
-# Ranking Akumulasi Anti Double
 if len(sel_periode) > 1:
     df_rank = df_f.groupby(["Kode_Dokter","Nama_Dokter"], as_index=False).agg(
-        PIC=("PIC","first"), CD_Omzet=("CD_Omzet","sum"), CD_Pasien=("CD_Pasien","sum"),
-        SA_Omzet=("SA_Omzet","sum"), SA_Pasien=("SA_Pasien","sum"),
-        Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum"),
-        Jumlah_Bulan=("Periode","nunique")
+        PIC=("PIC","first"), Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum"), Jumlah_Bulan=("Periode","nunique")
     ).sort_values(by=sort_by, ascending=False)
-    total_dokter_unik = df_f["Kode_Dokter"].nunique()
 else:
     df_rank = df_f.sort_values(by=sort_by, ascending=False)
-    total_dokter_unik = df_f["Kode_Dokter"].nunique()
 
-c1,c2,c3,c4=st.columns(4)
+c1,c2,c3=st.columns(3)
 c1.metric("Total Omzet", f"Rp {df_f['Total_Omzet'].sum():,}")
-c2.metric("Total Pasien", f"{df_f['Total_Pasien'].sum():,}")
-c3.metric("Dokter Unik", f"{total_dokter_unik}")
-c4.metric("PIC", f"{df_f['PIC'].nunique()}")
+c2.metric("Pasien", f"{df_f['Total_Pasien'].sum():,}")
+c3.metric("Dokter Unik", f"{df_f['Kode_Dokter'].nunique()}")
 
-st.subheader(f"🏆 Ranking {sort_by} - {len(df_rank)} Dokter Unik")
-
+st.subheader(f"🏆 Ranking {sort_by}")
 buf=io.BytesIO()
 with pd.ExcelWriter(buf, engine='openpyxl') as w:
-    df_rank.to_excel(w, index=False, sheet_name='Ranking_Akumulasi')
-st.download_button("📥 Export Excel", data=buf.getvalue(), file_name=f"Ranking_Akumulasi_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    df_rank.to_excel(w, index=False, sheet_name='Ranking')
+st.download_button("📥 Export Excel", data=buf.getvalue(), file_name=f"Ranking_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 st.dataframe(df_rank, use_container_width=True, height=450)
 
 st.divider()
-st.subheader("📅 Trend MoM - Sudah Urut Jan-Des")
-
-trend = df.groupby("Periode", as_index=False).agg(
-    Total_Omzet=("Total_Omzet","sum"),
-    Total_Pasien=("Total_Pasien","sum"),
-    Kode_Dokter=("Kode_Dokter","nunique")
-)
+st.subheader("📅 Trend MoM - Sudah Urut JANUARI-DES")
+trend = df.groupby("Periode", as_index=False).agg(Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum"), Kode_Dokter=("Kode_Dokter","nunique"))
 trend["SortDate"] = trend["Periode"].apply(parse_periode_to_date)
 trend = trend.sort_values("SortDate")
-
-# Grafik urut
-st.line_chart(trend.set_index("Periode")[["Total_Omzet"]], use_container_width=True)
-
-# Tabel juga urut
+st.line_chart(trend.set_index("Periode")[["Total_Omzet"]])
 st.dataframe(trend[["Periode","Total_Omzet","Total_Pasien","Kode_Dokter"]], use_container_width=True)
+
+st.caption("V7: JANU->JANUARI, FEBR->FEBRUARI otomatis")
