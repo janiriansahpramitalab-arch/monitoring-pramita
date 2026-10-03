@@ -1,25 +1,26 @@
-import fitz, pandas as pd, os, io
+import fitz, pandas as pd, os, io, json
 import streamlit as st
 from openpyxl.styles import PatternFill, Font
 
-st.set_page_config(page_title="Monitoring Pramita V11 TOP10", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Monitoring Pramita V13", layout="wide", page_icon="📊")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
+HIDDEN_FILE = "hidden_config.json"
 
-PIC_HIDDEN_LIST = ["NARINDRA NATA KUNTHARA", "YOHANA DEWI RATIH"]
+# --- LOAD HIDDEN CONFIG ---
+def load_hidden():
+    if os.path.exists(HIDDEN_FILE):
+        with open(HIDDEN_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get("PIC", ["NARINDRA NATA KUNTHARA", "YOHANA DEWI RATIH"]), data.get("DOKTER_KODE", ["2741002000"]), data.get("DOKTER_NAMA", ["HEPI SULAKSONO"])
+    return ["NARINDRA NATA KUNTHARA", "YOHANA DEWI RATIH"], ["2741002000"], ["HEPI SULAKSONO"]
 
-BULAN_FULL = {
-    "JANU": "JANUARI", "JAN": "JANUARI",
-    "FEBR": "FEBRUARI", "FEB": "FEBRUARI",
-    "MARET": "MARET", "MAR": "MARET",
-    "APRIL": "APRIL", "APR": "APRIL",
-    "MEI": "MEI", "JUNI": "JUNI", "JUN": "JUNI",
-    "JULI": "JULI", "JUL": "JULI",
-    "AGUS": "AGUSTUS", "AGU": "AGUSTUS",
-    "SEPT": "SEPTEMBER", "SEP": "SEPTEMBER",
-    "OKTO": "OKTOBER", "OKT": "OKTOBER",
-    "NOPE": "NOVEMBER", "NOV": "NOVEMBER",
-    "DESE": "DESEMBER", "DES": "DESEMBER"
-}
+def save_hidden(pic_list, kode_list, nama_list):
+    with open(HIDDEN_FILE, 'w') as f:
+        json.dump({"PIC": pic_list, "DOKTER_KODE": kode_list, "DOKTER_NAMA": nama_list}, f)
+
+PIC_HIDDEN_LIST, DOKTER_HIDDEN_KODE, DOKTER_HIDDEN_NAMA = load_hidden()
+
+BULAN_FULL = {"JANU": "JANUARI", "JAN": "JANUARI","FEBR": "FEBRUARI", "FEB": "FEBRUARI","MARET": "MARET", "MAR": "MARET","APRIL": "APRIL", "APR": "APRIL","MEI": "MEI","JUNI": "JUNI", "JUN": "JUNI","JULI": "JULI", "JUL": "JULI","AGUS": "AGUSTUS", "AGU": "AGUSTUS","SEPT": "SEPTEMBER", "SEP": "SEPTEMBER","OKTO": "OKTOBER", "OKT": "OKTOBER","NOPE": "NOVEMBER", "NOV": "NOVEMBER","DESE": "DESEMBER", "DES": "DESEMBER"}
 BULAN_ANGKA = {"JANUARI":1,"FEBRUARI":2,"MARET":3,"APRIL":4,"MEI":5,"JUNI":6,"JULI":7,"AGUSTUS":8,"SEPTEMBER":9,"OKTOBER":10,"NOVEMBER":11,"DESEMBER":12}
 
 def normalize_periode(per_str):
@@ -34,39 +35,30 @@ def normalize_periode(per_str):
 
 def parse_date(per_str):
     try:
-        norm = normalize_periode(per_str)
-        nama = norm.split("-")[0]
-        thn = int(norm.split("-")[1])
-        bln = BULAN_ANGKA.get(nama, 1)
-        return pd.Timestamp(year=thn, month=bln, day=1)
-    except:
-        return pd.Timestamp(year=2026, month=1, day=1)
+        norm = normalize_periode(per_str); nama = norm.split("-")[0]; thn = int(norm.split("-")[1])
+        bln = BULAN_ANGKA.get(nama, 1); return pd.Timestamp(year=thn, month=bln, day=1)
+    except: return pd.Timestamp(year=2026, month=1, day=1)
 
 def to_int(s):
     try: return int(str(s).replace('.','').replace(',','').strip())
     except: return 0
 
 def parse_pdf(pdf_path, periode_label):
-    doc = fitz.open(pdf_path)
-    parsed = []
+    doc = fitz.open(pdf_path); parsed = []
     is_new = any("CIK DI TIRO" in doc[p].get_text("text") for p in range(min(2,len(doc))))
     if is_new:
         for p_idx in range(len(doc)):
-            txt=doc[p_idx].get_text("text")
-            lines=[l.strip() for l in txt.splitlines() if l.strip()!='']
-            pic="UNKNOWN"
+            txt=doc[p_idx].get_text("text"); lines=[l.strip() for l in txt.splitlines() if l.strip()!='']; pic="UNKNOWN"
             for i,l in enumerate(lines):
                 if "Tanggal" in l or "s/d" in l:
                     for k in range(i+1, min(i+6,len(lines))):
                         cand=lines[k].strip()
                         if len(cand)>3 and cand.upper()==cand and "JASA" not in cand and "PENGAMBILAN" not in cand and "PRE" not in cand:
-                            if not any(ch.isdigit() for ch in cand) and len(cand.split())<=4:
-                                pic=cand.title(); break
+                            if not any(ch.isdigit() for ch in cand) and len(cand.split())<=4: pic=cand.title(); break
                     break
             i=0
             while i < len(lines):
-                l=lines[i]
-                cd=''.join(c for c in l if c.isdigit())
+                l=lines[i]; cd=''.join(c for c in l if c.isdigit())
                 if len(cd)==10 and l.replace('.','').isdigit():
                     kode=cd; nama=lines[i+1] if i+1<len(lines) and any(c.isalpha() for c in lines[i+1]) else ""; offset=2 if nama else 1
                     if i+offset < len(lines) and lines[i+offset] in ["6","7","8","9","10","11","12","5","4","3","2","1"]: offset+=1
@@ -77,13 +69,11 @@ def parse_pdf(pdf_path, periode_label):
                         if cur.upper().startswith("TOTAL"): break
                         if cur.startswith("Yang Membuat"): break
                         tc=cur.replace('.','').replace(',','')
-                        if tc.isdigit(): nums.append(tc)
+                        if tc.isdigit(): nums.append(tc);
                         j+=1
                     if len(nums)>=4:
-                        if len(nums)>=12:
-                            cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]); sultan_total=to_int(nums[4]); sultan_psn=to_int(nums[7]); total_omzet=to_int(nums[8]); total_psn=to_int(nums[10])
-                        else:
-                            cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]) if len(nums)>3 else 0; sultan_total=to_int(nums[4]) if len(nums)>4 else 0; sultan_psn=to_int(nums[7]) if len(nums)>7 else 0; total_omzet=cik_total+sultan_total; total_psn=cik_psn+sultan_psn
+                        if len(nums)>=12: cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]); sultan_total=to_int(nums[4]); sultan_psn=to_int(nums[7]); total_omzet=to_int(nums[8]); total_psn=to_int(nums[10])
+                        else: cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]) if len(nums)>3 else 0; sultan_total=to_int(nums[4]) if len(nums)>4 else 0; sultan_psn=to_int(nums[7]) if len(nums)>7 else 0; total_omzet=cik_total+sultan_total; total_psn=cik_psn+sultan_psn
                         parsed.append({"Periode":normalize_periode(periode_label),"PIC":pic,"Kode_Dokter":kode,"Nama_Dokter":nama[:60],"CD_Omzet":cik_total,"CD_Pasien":cik_psn,"SA_Omzet":sultan_total,"SA_Pasien":sultan_psn,"Total_Omzet":total_omzet,"Total_Pasien":total_psn})
                     i=j-1
                 i+=1
@@ -109,8 +99,7 @@ def parse_pdf(pdf_path, periode_label):
                     if tt in ["6","7","8","9","10","11","12","1","2","3","4","5"]: bln=j; break
                 if bln==-1: return None
                 nama=" ".join(after[:bln]); nums=[x for x in after[bln+1:] if x.replace('.','').replace(',','').isdigit()]
-                if len(nums)>=12:
-                    return {"Periode":normalize_periode(periode_label),"PIC":pic.title(),"Kode_Dokter":kode,"Nama_Dokter":nama,"CD_Omzet":to_int(nums[0]),"CD_Pasien":to_int(nums[3]),"SA_Omzet":to_int(nums[4]),"SA_Pasien":to_int(nums[7]),"Total_Omzet":to_int(nums[8]),"Total_Pasien":to_int(nums[10])}
+                if len(nums)>=12: return {"Periode":normalize_periode(periode_label),"PIC":pic.title(),"Kode_Dokter":kode,"Nama_Dokter":nama,"CD_Omzet":to_int(nums[0]),"CD_Pasien":to_int(nums[3]),"SA_Omzet":to_int(nums[4]),"SA_Pasien":to_int(nums[7]),"Total_Omzet":to_int(nums[8]),"Total_Pasien":to_int(nums[10])}
                 return None
             for line in lines:
                 line=line.strip()
@@ -131,7 +120,7 @@ def parse_pdf(pdf_path, periode_label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-st.title("📊 Monitoring Pramita V11 - TOP 10 Highlight")
+st.title("📊 Monitoring Pramita V13 - Kelola Hide")
 
 with st.sidebar:
     st.header("📂 Upload PDF")
@@ -140,11 +129,10 @@ with st.sidebar:
     if up:
         open("temp.pdf","wb").write(up.getbuffer())
         df_new=parse_pdf("temp.pdf", periode)
-        st.success(f"Terbaca {len(df_new)} dokter -> {normalize_periode(periode)}")
+        st.success(f"Terbaca {len(df_new)} -> {normalize_periode(periode)}")
         if st.button("💾 Simpan"):
             if os.path.exists(DB_FILE):
-                old=pd.read_excel(DB_FILE)
-                old["Periode"] = old["Periode"].apply(normalize_periode)
+                old=pd.read_excel(DB_FILE); old["Periode"] = old["Periode"].apply(normalize_periode)
                 old=old[old["Periode"]!=normalize_periode(periode)]
                 all_df=pd.concat([old,df_new], ignore_index=True)
             else: all_df=df_new
@@ -171,18 +159,44 @@ with st.sidebar:
     sel_periode=st.multiselect("Pilih Periode", period_options, default=period_options)
     sel_pic=st.selectbox("PIC", ["Semua"]+sorted(df["PIC"].dropna().unique().tolist()))
     sort_by=st.selectbox("Urut Ranking", ["Total_Omzet","Total_Pasien","CD_Omzet","SA_Omzet"])
-    if pics_to_hide_real:
-        st.warning(f"🙈 Hide: {', '.join(pics_to_hide_real)}")
+
+    st.divider()
+    st.header("🙈 Kelola Hide Dokter")
+    st.caption("Tanpa edit kode lagi")
+    st.write("**Dokter yang di-Hide:**")
+    st.write(DOKTER_HIDDEN_KODE)
+    new_kode = st.text_input("Tambah Kode Dokter (10 digit)")
+    if st.button("Tambah Hide Kode"):
+        if new_kode and new_kode not in DOKTER_HIDDEN_KODE:
+            DOKTER_HIDDEN_KODE.append(new_kode.strip())
+            save_hidden(PIC_HIDDEN_LIST, DOKTER_HIDDEN_KODE, DOKTER_HIDDEN_NAMA)
+            st.success(f"{new_kode} di-hide"); st.rerun()
+    del_kode = st.selectbox("Hapus Hide Kode", ["-"]+DOKTER_HIDDEN_KODE)
+    if st.button("Hapus dari Hide"):
+        if del_kode!= "-":
+            DOKTER_HIDDEN_KODE.remove(del_kode)
+            save_hidden(PIC_HIDDEN_LIST, DOKTER_HIDDEN_KODE, DOKTER_HIDDEN_NAMA)
+            st.success(f"{del_kode} ditampilkan lagi"); st.rerun()
+
+    st.divider()
+    if pics_to_hide_real: st.warning(f"PIC Hide: {', '.join(pics_to_hide_real)}")
+    st.info(f"Dokter Hide: {', '.join(DOKTER_HIDDEN_KODE)}")
 
 df_f=df[df["Periode"].isin(sel_periode)] if sel_periode else df
 if sel_pic!="Semua": df_f=df_f[df_f["PIC"]==sel_pic]
 
 c1,c2,c3=st.columns(3)
-c1.metric("Total Omzet (Semua PIC)", f"Rp {df_f['Total_Omzet'].sum():,}")
+c1.metric("Total Omzet", f"Rp {df_f['Total_Omzet'].sum():,}")
 c2.metric("Total Pasien", f"{df_f['Total_Pasien'].sum():,}")
-c3.metric("Dokter", f"{df_f['Kode_Dokter'].nunique()}")
+c3.metric("Dokter Unik", f"{df_f['Kode_Dokter'].nunique()}")
 
-df_rank_base = df_f[~df_f["PIC"].isin(pics_to_hide_real)] if pics_to_hide_real else df_f
+df_rank_base = df_f.copy()
+if pics_to_hide_real:
+    df_rank_base = df_rank_base[~df_rank_base["PIC"].isin(pics_to_hide_real)]
+df_rank_base = df_rank_base[~df_rank_base["Kode_Dokter"].astype(str).isin(DOKTER_HIDDEN_KODE)]
+for nama_hide in DOKTER_HIDDEN_NAMA:
+    df_rank_base = df_rank_base[~df_rank_base["Nama_Dokter"].astype(str).str.upper().str.contains(nama_hide.upper(), na=False)]
+
 if len(sel_periode) > 1:
     df_rank = df_rank_base.groupby(["Kode_Dokter","Nama_Dokter"], as_index=False).agg(
         PIC=("PIC","first"), CD_Omzet=("CD_Omzet","sum"), CD_Pasien=("CD_Pasien","sum"),
@@ -195,39 +209,28 @@ else:
 
 df_rank = df_rank.reset_index(drop=True)
 df_rank.insert(0, "No", range(1, len(df_rank)+1))
-if "SortDate" in df_rank.columns:
-    df_rank = df_rank.drop(columns=["SortDate"])
+if "SortDate" in df_rank.columns: df_rank = df_rank.drop(columns=["SortDate"])
 
-# STYLE TOP 10
 def highlight_top10(row):
     idx = row.name
-    if idx < 3: # 1-3 Emas
-        return ['font-weight: bold; background-color: #FFF176; color: black'] * len(row)
-    elif idx < 10: # 4-10 Hijau
-        return ['font-weight: bold; background-color: #C8E6C9; color: black'] * len(row)
-    else:
-        return [''] * len(row)
+    if idx < 3: return ['font-weight: bold; background-color: #FFF176; color: black'] * len(row)
+    elif idx < 10: return ['font-weight: bold; background-color: #C8E6C9; color: black'] * len(row)
+    else: return [''] * len(row)
 
-st.subheader(f"🏆 Ranking {sort_by} - TOP 10 Tebal & Berwarna")
-st.markdown("🥇 **No 1-3 = Kuning Emas (Juara)** | 🥈 **No 4-10 = Hijau (Top 10)**")
+st.subheader(f"🏆 Ranking {sort_by} - {len(df_rank)} Dokter (Hide Otomatis)")
 st.dataframe(df_rank.style.apply(highlight_top10, axis=1), use_container_width=True, height=600, hide_index=True)
 
-# Export Excel dengan warna juga
 buf=io.BytesIO()
 with pd.ExcelWriter(buf, engine='openpyxl') as writer:
     df_rank.to_excel(writer, index=False, sheet_name='Ranking_TOP10')
     ws = writer.sheets['Ranking_TOP10']
-    # Warna di Excel
     fill_gold = PatternFill(start_color="FFF176", end_color="FFF176", fill_type="solid")
     fill_green = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")
     font_bold = Font(bold=True)
-    for r_idx in range(2, min(12, len(df_rank)+2)): # baris 2-11 = top 10
+    for r_idx in range(2, min(12, len(df_rank)+2)):
         for c in range(1, len(df_rank.columns)+1):
             cell = ws.cell(row=r_idx, column=c)
             cell.font = font_bold
-            if r_idx <= 4: # 1-3
-                cell.fill = fill_gold
-            else:
-                cell.fill = fill_green
+            cell.fill = fill_gold if r_idx <= 4 else fill_green
 
-st.download_button("📥 Export Excel TOP 10 Berwarna", data=buf.getvalue(), file_name=f"Ranking_TOP10_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+st.download_button("📥 Export Excel", data=buf.getvalue(), file_name=f"Ranking_V13_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
