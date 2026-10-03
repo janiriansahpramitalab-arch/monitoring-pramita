@@ -8,8 +8,8 @@ DB_FILE = "Database_Monitoring_Pramita.xlsx"
 BULAN_FULL = {
     "JANU": "JANUARI", "JAN": "JANUARI",
     "FEBR": "FEBRUARI", "FEB": "FEBRUARI",
-    "MARET": "MARET", "MAR": "MARET",
-    "APRIL": "APRIL", "APR": "APRIL",
+    "MARE": "MARET", "MAR": "MARET",
+    "APRI": "APRIL", "APR": "APRIL",
     "MEI": "MEI",
     "JUNI": "JUNI", "JUN": "JUNI",
     "JULI": "JULI", "JUL": "JULI",
