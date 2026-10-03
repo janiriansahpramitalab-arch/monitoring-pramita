@@ -2,13 +2,12 @@ import fitz, pandas as pd, os, io, json
 import streamlit as st
 from openpyxl.styles import PatternFill, Font
 
-st.set_page_config(page_title="Monitoring Pramita V13.2 FINAL", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Monitoring Pramita V13.3 RAPI", layout="wide", page_icon="📊")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_FILE = "hidden_config.json"
 
 PIC_HIDDEN_LIST = ["NARINDRA NATA KUNTHARA", "YOHANA DEWI RATIH"]
-# FIX: HANYA KODE EXACT INI SAJA YANG DI-HIDE
-DOKTER_HIDDEN_KODE_DEFAULT = ["2741002000"]
+DOKTER_HIDDEN_KODE_DEFAULT = ["2741002000"] # HANYA INI YANG HIDE
 
 def load_hidden():
     if os.path.exists(HIDDEN_FILE):
@@ -126,7 +125,7 @@ def parse_pdf(pdf_path, periode_label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-st.title("📊 Monitoring Pramita V13.2 FINAL")
+st.title("📊 Monitoring Pramita V13.3 RAPI")
 
 with st.sidebar:
     st.header("📂 Upload PDF")
@@ -136,7 +135,6 @@ with st.sidebar:
         open("temp.pdf","wb").write(up.getbuffer())
         df_new=parse_pdf("temp.pdf", periode)
         st.success(f"Terbaca {len(df_new)} -> {normalize_periode(periode)}")
-        st.dataframe(df_new[df_new["Kode_Dokter"].astype(str).str.contains("1998|2000")])
         if st.button("💾 Simpan"):
             if os.path.exists(DB_FILE):
                 old=pd.read_excel(DB_FILE); old["Periode"] = old["Periode"].apply(normalize_periode)
@@ -144,11 +142,6 @@ with st.sidebar:
                 all_df=pd.concat([old,df_new], ignore_index=True)
             else: all_df=df_new
             all_df.to_excel(DB_FILE,index=False); st.success("Tersimpan!"); st.rerun()
-    st.divider()
-    if os.path.exists(DB_FILE):
-        if st.button("🗑️ Hapus Config Hide & Reset"):
-            if os.path.exists(HIDDEN_FILE): os.remove(HIDDEN_FILE)
-            st.success("Reset! Hide hanya 2741002000"); st.rerun()
 
 if not os.path.exists(DB_FILE): st.info("Upload dulu"); st.stop()
 df=pd.read_excel(DB_FILE)
@@ -170,34 +163,28 @@ with st.sidebar:
     sel_pic=st.selectbox("PIC", ["Semua"]+sorted(df["PIC"].dropna().unique().tolist()))
     sort_by=st.selectbox("Urut Ranking", ["Total_Omzet","Total_Pasien","CD_Omzet","SA_Omzet"])
     st.divider()
-    st.header("🙈 Kelola Hide Dokter (by Kode Exact)")
-    st.caption("Hanya kode exact yang di-hide, nama tidak")
-    st.code(f"{DOKTER_HIDDEN_KODE}")
-    new_kode = st.text_input("Tambah Kode Dokter")
+    st.header("🙈 Kelola Hide")
+    st.caption("Hide exact kode saja")
+    st.write(DOKTER_HIDDEN_KODE)
+    new_kode = st.text_input("Tambah Kode Hide")
     if st.button("Tambah Hide"):
         if new_kode and new_kode not in DOKTER_HIDDEN_KODE:
             DOKTER_HIDDEN_KODE.append(new_kode.strip())
             save_hidden(PIC_HIDDEN_LIST_LOAD, DOKTER_HIDDEN_KODE)
-            st.success(f"{new_kode} di-hide"); st.rerun()
+            st.rerun()
     del_kode = st.selectbox("Hapus Hide", ["-"]+DOKTER_HIDDEN_KODE)
     if st.button("Hapus dari Hide"):
         if del_kode!= "-":
             DOKTER_HIDDEN_KODE.remove(del_kode)
             save_hidden(PIC_HIDDEN_LIST_LOAD, DOKTER_HIDDEN_KODE)
-            st.success(f"{del_kode} muncul lagi"); st.rerun()
+            st.rerun()
 
 df_f=df[df["Periode"].isin(sel_periode)] if sel_periode else df
 if sel_pic!="Semua": df_f=df_f[df_f["PIC"]==sel_pic]
 
-# Cek khusus HEPI 1998
-st.info(f"🔍 Cek dokter 1998: ditemukan {len(df_f[df_f['Kode_Dokter']=='2741001998'])} data untuk kode 2741001998 di filter ini")
-if len(df_f[df_f['Kode_Dokter']=='2741001998'])>0:
-    st.dataframe(df_f[df_f['Kode_Dokter']=='2741001998'])
-
 df_rank_base = df_f.copy()
 if pics_to_hide_real:
     df_rank_base = df_rank_base[~df_rank_base["PIC"].isin(pics_to_hide_real)]
-# FIX UTAMA: HANYA HIDE BY KODE EXACT, TIDAK BY NAMA
 df_rank_base = df_rank_base[~df_rank_base["Kode_Dokter"].astype(str).isin(DOKTER_HIDDEN_KODE)]
 
 if len(sel_periode) > 1:
@@ -220,8 +207,8 @@ def highlight_top10(row):
     else: return [''] * len(row)
 
 st.subheader(f"🏆 Ranking {sort_by} - {len(df_rank)} Dokter")
-st.markdown("🥇 **1-3 Kuning | 4-10 Hijau** | `2741001998` tetap muncul, `2741002000` hide")
-st.dataframe(df_rank.style.apply(highlight_top10, axis=1), use_container_width=True, height=600, hide_index=True)
+st.markdown("🥇 No 1-3 Kuning Emas | No 4-10 Hijau Muda")
+st.dataframe(df_rank.style.apply(highlight_top10, axis=1), use_container_width=True, height=650, hide_index=True)
 
 buf=io.BytesIO()
 with pd.ExcelWriter(buf, engine='openpyxl') as writer:
@@ -235,5 +222,4 @@ with pd.ExcelWriter(buf, engine='openpyxl') as writer:
             cell = ws.cell(row=r_idx, column=c)
             cell.font = font_bold
             cell.fill = fill_gold if r_idx <= 4 else fill_green
-
-st.download_button("📥 Export Excel", data=buf.getvalue(), file_name=f"Ranking_V13_2_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+st.download_button("📥 Export Excel Rapi", data=buf.getvalue(), file_name=f"Ranking_Rapi_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
