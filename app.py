@@ -1,28 +1,24 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
 
-st.set_page_config(page_title="Pramita V16.2 Logo", layout="wide", page_icon="💎")
+st.set_page_config(page_title="Pramita V16.3 Top10 Premium", layout="wide", page_icon="🏆")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
 
-# LOGO PRAMITA BASE64 - EMBEDDED (tidak perlu upload file lagi)
-LOGO_BASE64 = "iVBORw0KGgoAAAANSUhEUgAA... [SAYA POTONG BIAR TIDAK PANJANG]"
-
-# Pakai logo dari file yang kakak kirim tadi
-# Kita pakai link langsung dari upload kakak
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
 html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 .main {background-color: #f6f8fb;}
-div[data-testid="metric-container"] {background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);}
+div[data-testid="metric-container"] {background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eef2f7;}
 .gradient-header {
     background: linear-gradient(135deg,#b91c1c 0%, #dc2626 50%, #ef4444 100%);
     padding: 18px 24px; border-radius: 18px; color: white; margin-bottom: 20px;
     display:flex; align-items:center; gap:18px;
 }
-.card {background: white; border-radius: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); margin-bottom:16px;}
-.stTabs [data-baseweb="tab"] {background: white; border-radius: 10px; padding: 10px 20px;}
+.card {background: white; border-radius: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); border: 1px solid #eef2f7; margin-bottom:16px;}
+.stTabs [data-baseweb="tab-list"] {gap: 8px;}
+.stTabs [data-baseweb="tab"] {background: white; border-radius: 10px; padding: 10px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);}
 .stTabs [aria-selected="true"] {background: linear-gradient(135deg,#dc2626,#991b1b); color:white!important;}
 </style>
 """, unsafe_allow_html=True)
@@ -41,7 +37,7 @@ def push_to_github(file_path):
         return (True, "OK") if r_put.status_code in [200,201] else (False, "")
     except: return False, ""
 
-BULAN_FULL = {"JANU":"JANUARI","JAN":"JANUARI","FEBR":"FEBRUARI","FEB":"FEBRUARI","MAR":"MARET","APRIL":"APRIL","APR":"APRIL","MEI":"MEI","JUNI":"JUNI","JUN":"JUNI","JULI":"JULI","JUL":"JULI","AGUS":"AGUSTUS","AGU":"AGUSTUS","SEPT":"SEPTEMBER","SEP":"SEPTEMBER","OKTO":"OKTOBER","OKT":"OKTOBER","NOPE":"NOVEMBER","NOV":"NOVEMBER","DESE":"DESEMBER","DES":"DESEMBER"}
+BULAN_FULL = {"JANU":"JANUARI","JAN":"JANUARI","FEBR":"FEBRUARI","FEB":"FEBRUARI","MAR":"MARET","MARET":"MARET","APRIL":"APRIL","APR":"APRIL","MEI":"MEI","JUNI":"JUNI","JUN":"JUNI","JULI":"JULI","JUL":"JULI","AGUS":"AGUSTUS","AGU":"AGUSTUS","SEPT":"SEPTEMBER","SEP":"SEPTEMBER","OKTO":"OKTOBER","OKT":"OKTOBER","NOPE":"NOVEMBER","NOV":"NOVEMBER","DESE":"DESEMBER","DES":"DESEMBER"}
 BULAN_ANGKA = {"JANUARI":1,"FEBRUARI":2,"MARET":3,"APRIL":4,"MEI":5,"JUNI":6,"JULI":7,"AGUSTUS":8,"SEPTEMBER":9,"OKTOBER":10,"NOVEMBER":11,"DESEMBER":12}
 def normalize_periode(s):
     s=str(s).upper().strip(); tahun="".join([c for c in s if c.isdigit()])[-4:]; huruf="".join([c for c in s if c.isalpha()]); full=BULAN_FULL.get(huruf[:4],huruf); return f"{full}-{tahun}" if tahun else full
@@ -51,6 +47,7 @@ def parse_date(s):
 def to_int(s):
     try: return int(str(s).replace('.','').replace(',','').strip())
     except: return 0
+
 def parse_pdf(path, label):
     doc=fitz.open(path); parsed=[]; is_new=any("CIK DI TIRO" in doc[p].get_text("text") for p in range(min(2,len(doc))))
     if is_new:
@@ -67,7 +64,7 @@ def parse_pdf(path, label):
                 l=lines[i]; cd=''.join(c for c in l if c.isdigit())
                 if len(cd)==10 and l.replace('.','').isdigit():
                     kode=cd; nama=lines[i+1] if i+1<len(lines) and any(c.isalpha() for c in lines[i+1]) else ""; off=2 if nama else 1
-                    if i+off < len(lines) and lines[i+off] in ["6","7","8","9","10","11","12"]: off+=1
+                    if i+off < len(lines) and lines[i+off] in ["6","7","8","9","10","11","12","5","4","3","2","1"]: off+=1
                     nums=[]; j=i+off
                     while j < len(lines) and len(nums)<12:
                         cur=lines[j]; c2=''.join(c for c in cur if c.isdigit())
@@ -122,7 +119,7 @@ def parse_pdf(path, label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-# HEADER MODERN DENGAN LOGO LANGSUNG EMBED
+# HEADER MODERN LOGO EMBEDDED
 st.markdown(f'''
 <div class="gradient-header">
     <div style="background:white; border-radius:12px; padding:6px 14px; display:flex; align-items:center;">
@@ -131,7 +128,7 @@ st.markdown(f'''
     </div>
     <div>
         <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1>
-        <p style="margin:4px 0 0 0;opacity:0.95">Pramita Lab - Dashboard Pimpinan V16.2 Modern | Auto-Permanen & Hidden Active</p>
+        <p style="margin:4px 0 0 0;opacity:0.95">Pramita Lab - V16.3 Top 10 Premium | Auto-Permanen & Hidden Active</p>
     </div>
 </div>
 ''', unsafe_allow_html=True)
@@ -154,14 +151,15 @@ with st.sidebar:
                 for per in df_m["Periode"].unique(): old=old[old["Periode"]!=per]
                 final=pd.concat([old, df_m], ignore_index=True)
             else: final=df_m
+            final["Total_Omzet"]=final["CD_Omzet"]+final["SA_Omzet"]; final["Total_Pasien"]=final["CD_Pasien"]+final["SA_Pasien"]
             final.to_excel(DB_FILE, index=False); push_to_github(DB_FILE); st.rerun()
     st.divider()
-    st.caption("V16.2 - Logo Embedded - Modern Red")
+    st.caption("V16.3 - Top 10 Premium Highlight")
 
 if not os.path.exists(DB_FILE): st.info("Upload PDF dulu kak di sidebar kiri"); st.stop()
 df=pd.read_excel(DB_FILE); df["Periode"]=df["Periode"].apply(normalize_periode); df["SortDate"]=df["Periode"].apply(parse_date); df=df.sort_values("SortDate")
 df["Kode_Dokter"]=df["Kode_Dokter"].astype(str); df["Total_Omzet"]=df["CD_Omzet"]+df["SA_Omzet"]; df["Total_Pasien"]=df["CD_Pasien"]+df["SA_Pasien"]
-df["Tahun"]=df["SortDate"].dt.year
+df["Tahun"]=df["SortDate"].dt.year; df["Bulan"]=df["Periode"].apply(lambda x: x.split("-")[0])
 
 with st.sidebar:
     st.markdown("### 🔎 Filter Pimpinan")
@@ -169,7 +167,7 @@ with st.sidebar:
     periode_list=df.sort_values("SortDate")["Periode"].unique().tolist(); sel_periode=st.multiselect("Periode", periode_list, default=periode_list)
     cabang_opsi=st.selectbox("Cabang", ["Semua","Cik Di Tiro","Sultan Agung"])
     pic_list=["Semua"]+sorted(df["PIC"].dropna().unique().tolist()); sel_pic=st.selectbox("PIC", pic_list)
-    sort_by=st.selectbox("Ranking Urut", ["Total_Omzet","Total_Pasien"])
+    sort_by=st.selectbox("Ranking Urut", ["Total_Omzet","Total_Pasien","CD_Omzet","SA_Omzet"])
 
 df_all=df[df["Periode"].isin(sel_periode)] if sel_periode else df
 if sel_tahun: df_all=df_all[df_all["Tahun"].isin(sel_tahun)]
@@ -194,12 +192,12 @@ with tab1:
     c1,c2=st.columns([2,1])
     with c1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.write("### 📈 Trend Omzet & Pasien")
+        st.write("### 📈 Trend Omzet & Pasien (Include Hidden)")
         st.line_chart(df_month.set_index("SortDate")[["Total_Omzet","Total_Pasien"]])
         st.markdown('</div>', unsafe_allow_html=True)
     with c2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.write("### 🔥 Top 3")
+        st.write("### 🔥 Top 3 Performer")
         top=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet=("Total_Omzet","sum"), Pasien=("Total_Pasien","sum")).sort_values("Omzet",ascending=False).head(3)
         for i,row in top.iterrows():
             medal="🥇" if i==0 else "🥈" if i==1 else "🥉"
@@ -210,22 +208,42 @@ with tab1:
 
 with tab2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write(f"#### 🏆 Ranking - {sort_by}")
-    df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")).sort_values(sort_by,ascending=False).reset_index(drop=True)
-    df_rank.insert(0,"Rank",range(1,len(df_rank)+1)); df_rank["Medal"]=df_rank["Rank"].apply(lambda x: "🥇" if x==1 else "🥈" if x==2 else "🥉" if x==3 else f"#{x}")
-    st.dataframe(df_rank, use_container_width=True, hide_index=True, height=650)
+    st.write(f"#### 🏆 Ranking Modern - {sort_by} (Top 10 Highlight Premium)")
+    df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(
+        Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),
+        CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),
+        Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")
+    ).sort_values(sort_by,ascending=False).reset_index(drop=True)
+    df_rank.insert(0,"Rank",range(1,len(df_rank)+1))
+    df_rank["Medal"]=df_rank["Rank"].apply(lambda x: "🥇 JUARA 1" if x==1 else "🥈 JUARA 2" if x==2 else "🥉 JUARA 3" if x==3 else f"⭐ TOP {x}" if x<=10 else f"#{x}")
+
+    def style_top10(row):
+        r = row['Rank']
+        if r == 1:
+            return ['background-color: #FFD700; color: #78350f; font-weight: 900; font-size: 15px; border-left: 6px solid #b45309;'] * len(row)
+        elif r == 2:
+            return ['background-color: #e5e7eb; color: #111827; font-weight: 800; font-size: 14px; border-left: 6px solid #6b7280;'] * len(row)
+        elif r == 3:
+            return ['background-color: #fdba74; color: #7c2d12; font-weight: 800; font-size: 14px; border-left: 6px solid #9a3412;'] * len(row)
+        elif 4 <= r <= 10:
+            return ['background-color: #e0f2fe; color: #0c4a6e; font-weight: 700; font-size: 13px; border-left: 5px solid #0284c7;'] * len(row)
+        else:
+            return ['background-color: white; color: #334155; font-size: 12px;'] * len(row)
+
+    st.dataframe(df_rank.style.apply(style_top10, axis=1), use_container_width=True, hide_index=True, height=700)
+    st.caption("🥇 Emas Juara 1 | 🥈 Perak Juara 2 | 🥉 Perunggu Juara 3 | ⭐ Biru = Top 4-10 Premium")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 📊 Per Cabang")
+    st.write("### 📊 Per Cabang Cik Di Tiro vs Sultan Agung")
     df_cabang=df_f.groupby("Periode",as_index=False).agg(CD=("CD_Omzet","sum"), SA=("SA_Omzet","sum")).sort_values("Periode")
     st.bar_chart(df_cabang.set_index("Periode")[["CD","SA"]])
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab4:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    q=st.text_input("🔎 Cari Dokter")
+    q=st.text_input("🔎 Cari Dokter (nama/kode) - hidden tidak tampil")
     if q:
         res=df_f[df_f["Nama_Dokter"].str.contains(q,case=False,na=False) | df_f["Kode_Dokter"].str.contains(q,case=False,na=False)].sort_values("SortDate")
         if not res.empty:
