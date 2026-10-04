@@ -2,12 +2,12 @@ import fitz, pandas as pd, os, io, json
 import streamlit as st
 from openpyxl.styles import PatternFill, Font
 
-st.set_page_config(page_title="Monitoring Pramita V13.3 RAPI", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Monitoring Pramita V13.5 ANTI KOSONG", layout="wide", page_icon="📊")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_FILE = "hidden_config.json"
 
 PIC_HIDDEN_LIST = ["NARINDRA NATA KUNTHARA", "YOHANA DEWI RATIH"]
-DOKTER_HIDDEN_KODE_DEFAULT = ["2741002000"] # HANYA INI YANG HIDE
+DOKTER_HIDDEN_KODE_DEFAULT = ["2741002000"]
 
 def load_hidden():
     if os.path.exists(HIDDEN_FILE):
@@ -15,8 +15,7 @@ def load_hidden():
             with open(HIDDEN_FILE, 'r') as f:
                 data = json.load(f)
                 return data.get("PIC", PIC_HIDDEN_LIST), data.get("DOKTER_KODE", DOKTER_HIDDEN_KODE_DEFAULT)
-        except:
-            return PIC_HIDDEN_LIST, DOKTER_HIDDEN_KODE_DEFAULT
+        except: return PIC_HIDDEN_LIST, DOKTER_HIDDEN_KODE_DEFAULT
     return PIC_HIDDEN_LIST, DOKTER_HIDDEN_KODE_DEFAULT
 
 def save_hidden(pic_list, kode_list):
@@ -29,21 +28,12 @@ BULAN_FULL = {"JANU": "JANUARI", "JAN": "JANUARI","FEBR": "FEBRUARI", "FEB": "FE
 BULAN_ANGKA = {"JANUARI":1,"FEBRUARI":2,"MARET":3,"APRIL":4,"MEI":5,"JUNI":6,"JULI":7,"AGUSTUS":8,"SEPTEMBER":9,"OKTOBER":10,"NOVEMBER":11,"DESEMBER":12}
 
 def normalize_periode(per_str):
-    s = str(per_str).upper().strip()
-    tahun = "".join([c for c in s if c.isdigit()])[-4:]
-    huruf = "".join([c for c in s if c.isalpha()])
-    prefix = huruf[:4]
-    full = BULAN_FULL.get(prefix, huruf)
-    if full in BULAN_ANGKA:
-        return f"{full}-{tahun}" if tahun else full
+    s = str(per_str).upper().strip(); tahun = "".join([c for c in s if c.isdigit()])[-4:]; huruf = "".join([c for c in s if c.isalpha()]); prefix = huruf[:4]; full = BULAN_FULL.get(prefix, huruf)
+    if full in BULAN_ANGKA: return f"{full}-{tahun}" if tahun else full
     return f"{BULAN_FULL.get(prefix, prefix)}-{tahun}"
-
 def parse_date(per_str):
-    try:
-        norm = normalize_periode(per_str); nama = norm.split("-")[0]; thn = int(norm.split("-")[1])
-        bln = BULAN_ANGKA.get(nama, 1); return pd.Timestamp(year=thn, month=bln, day=1)
+    try: norm = normalize_periode(per_str); nama = norm.split("-")[0]; thn = int(norm.split("-")[1]); bln = BULAN_ANGKA.get(nama, 1); return pd.Timestamp(year=thn, month=bln, day=1)
     except: return pd.Timestamp(year=2026, month=1, day=1)
-
 def to_int(s):
     try: return int(str(s).replace('.','').replace(',','').strip())
     except: return 0
@@ -77,9 +67,12 @@ def parse_pdf(pdf_path, periode_label):
                         if tc.isdigit(): nums.append(tc);
                         j+=1
                     if len(nums)>=4:
-                        if len(nums)>=12: cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]); sultan_total=to_int(nums[4]); sultan_psn=to_int(nums[7]); total_omzet=to_int(nums[8]); total_psn=to_int(nums[10])
-                        else: cik_total=to_int(nums[0]); cik_psn=to_int(nums[3]) if len(nums)>3 else 0; sultan_total=to_int(nums[4]) if len(nums)>4 else 0; sultan_psn=to_int(nums[7]) if len(nums)>7 else 0; total_omzet=cik_total+sultan_total; total_psn=cik_psn+sultan_psn
-                        parsed.append({"Periode":normalize_periode(periode_label),"PIC":pic,"Kode_Dokter":kode,"Nama_Dokter":nama[:80],"CD_Omzet":cik_total,"CD_Pasien":cik_psn,"SA_Omzet":sultan_total,"SA_Pasien":sultan_psn,"Total_Omzet":total_omzet,"Total_Pasien":total_psn})
+                        cik_o = to_int(nums[0]); cik_p = to_int(nums[3]) if len(nums)>3 else 0
+                        sul_o = to_int(nums[4]) if len(nums)>4 else 0; sul_p = to_int(nums[7]) if len(nums)>7 else 0
+                        if cik_p > 10000: cik_p = to_int(nums[1]) if len(nums)>1 else 0
+                        if sul_p > 10000: sul_p = to_int(nums[5]) if len(nums)>5 else 0
+                        tot_o = cik_o + sul_o; tot_p = cik_p + sul_p
+                        parsed.append({"Periode":normalize_periode(periode_label),"PIC":pic,"Kode_Dokter":kode,"Nama_Dokter":nama[:80],"CD_Omzet":cik_o,"CD_Pasien":cik_p,"SA_Omzet":sul_o,"SA_Pasien":sul_p,"Total_Omzet":tot_o,"Total_Pasien":tot_p})
                     i=j-1
                 i+=1
     else:
@@ -104,7 +97,10 @@ def parse_pdf(pdf_path, periode_label):
                     if tt in ["6","7","8","9","10","11","12","1","2","3","4","5"]: bln=j; break
                 if bln==-1: return None
                 nama=" ".join(after[:bln]); nums=[x for x in after[bln+1:] if x.replace('.','').replace(',','').isdigit()]
-                if len(nums)>=12: return {"Periode":normalize_periode(periode_label),"PIC":pic.title(),"Kode_Dokter":kode,"Nama_Dokter":nama[:80],"CD_Omzet":to_int(nums[0]),"CD_Pasien":to_int(nums[3]),"SA_Omzet":to_int(nums[4]),"SA_Pasien":to_int(nums[7]),"Total_Omzet":to_int(nums[8]),"Total_Pasien":to_int(nums[10])}
+                if len(nums)>=8:
+                    cik_o=to_int(nums[0]); cik_p=to_int(nums[3]); sul_o=to_int(nums[4]); sul_p=to_int(nums[7])
+                    tot_o=cik_o+sul_o; tot_p=cik_p+sul_p
+                    return {"Periode":normalize_periode(periode_label),"PIC":pic.title(),"Kode_Dokter":kode,"Nama_Dokter":nama[:80],"CD_Omzet":cik_o,"CD_Pasien":cik_p,"SA_Omzet":sul_o,"SA_Pasien":sul_p,"Total_Omzet":tot_o,"Total_Pasien":tot_p}
                 return None
             for line in lines:
                 line=line.strip()
@@ -125,7 +121,7 @@ def parse_pdf(pdf_path, periode_label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-st.title("📊 Monitoring Pramita V13.3 RAPI")
+st.title("📊 Monitoring Pramita V13.5 ANTI KOSONG")
 
 with st.sidebar:
     st.header("📂 Upload PDF")
@@ -135,20 +131,35 @@ with st.sidebar:
         open("temp.pdf","wb").write(up.getbuffer())
         df_new=parse_pdf("temp.pdf", periode)
         st.success(f"Terbaca {len(df_new)} -> {normalize_periode(periode)}")
-        if st.button("💾 Simpan"):
+        if st.button("💾 Simpan PDF ke Database"):
             if os.path.exists(DB_FILE):
                 old=pd.read_excel(DB_FILE); old["Periode"] = old["Periode"].apply(normalize_periode)
                 old=old[old["Periode"]!=normalize_periode(periode)]
                 all_df=pd.concat([old,df_new], ignore_index=True)
             else: all_df=df_new
+            all_df["Total_Omzet"] = all_df["CD_Omzet"] + all_df["SA_Omzet"]
+            all_df["Total_Pasien"] = all_df["CD_Pasien"] + all_df["SA_Pasien"]
             all_df.to_excel(DB_FILE,index=False); st.success("Tersimpan!"); st.rerun()
+    st.divider()
+    st.header("♻️ RESTORE DATABASE")
+    st.caption("Jika data kosong, upload file Excel backup disini")
+    up_excel = st.file_uploader("Upload Database_Monitoring_Pramita.xlsx", type=["xlsx"])
+    if up_excel:
+        open(DB_FILE,"wb").write(up_excel.getbuffer())
+        st.success("Database berhasil di-restore!"); st.rerun()
 
-if not os.path.exists(DB_FILE): st.info("Upload dulu"); st.stop()
+if not os.path.exists(DB_FILE):
+    st.warning("⚠️ Database belum ada / hilang karena restart server.")
+    st.info("Silahkan upload file `Database_Monitoring_Pramita.xlsx` di sidebar kiri > RESTORE DATABASE. Jika tidak punya, upload ulang semua PDF bulan Jan-Okt.")
+    st.stop()
+
 df=pd.read_excel(DB_FILE)
 df["Periode"] = df["Periode"].apply(normalize_periode)
 df["SortDate"] = df["Periode"].apply(parse_date)
 df = df.sort_values("SortDate")
 df["Kode_Dokter"] = df["Kode_Dokter"].astype(str)
+df["Total_Omzet"] = df["CD_Omzet"] + df["SA_Omzet"]
+df["Total_Pasien"] = df["CD_Pasien"] + df["SA_Pasien"]
 
 latest_periode = df.sort_values("SortDate")["Periode"].iloc[-1]
 latest_pics_upper = df[df["Periode"]==latest_periode]["PIC"].astype(str).str.upper().unique().tolist()
@@ -162,44 +173,36 @@ with st.sidebar:
     sel_periode=st.multiselect("Pilih Periode", period_options, default=period_options)
     sel_pic=st.selectbox("PIC", ["Semua"]+sorted(df["PIC"].dropna().unique().tolist()))
     sort_by=st.selectbox("Urut Ranking", ["Total_Omzet","Total_Pasien","CD_Omzet","SA_Omzet"])
+    if st.button("🔧 Perbaiki Total Pasien"):
+        df["Total_Omzet"] = df["CD_Omzet"] + df["SA_Omzet"]
+        df["Total_Pasien"] = df["CD_Pasien"] + df["SA_Pasien"]
+        df.drop(columns=["SortDate"]).to_excel(DB_FILE,index=False)
+        st.success("Diperbaiki!"); st.rerun()
     st.divider()
-    st.header("🙈 Kelola Hide")
-    st.caption("Hide exact kode saja")
-    st.write(DOKTER_HIDDEN_KODE)
-    new_kode = st.text_input("Tambah Kode Hide")
-    if st.button("Tambah Hide"):
-        if new_kode and new_kode not in DOKTER_HIDDEN_KODE:
-            DOKTER_HIDDEN_KODE.append(new_kode.strip())
-            save_hidden(PIC_HIDDEN_LIST_LOAD, DOKTER_HIDDEN_KODE)
-            st.rerun()
-    del_kode = st.selectbox("Hapus Hide", ["-"]+DOKTER_HIDDEN_KODE)
-    if st.button("Hapus dari Hide"):
-        if del_kode!= "-":
-            DOKTER_HIDDEN_KODE.remove(del_kode)
-            save_hidden(PIC_HIDDEN_LIST_LOAD, DOKTER_HIDDEN_KODE)
-            st.rerun()
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE,"rb") as f:
+            st.download_button("💾 Download Backup Database", data=f.read(), file_name="Database_Monitoring_Pramita.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 df_f=df[df["Periode"].isin(sel_periode)] if sel_periode else df
 if sel_pic!="Semua": df_f=df_f[df_f["PIC"]==sel_pic]
-
 df_rank_base = df_f.copy()
-if pics_to_hide_real:
-    df_rank_base = df_rank_base[~df_rank_base["PIC"].isin(pics_to_hide_real)]
+if pics_to_hide_real: df_rank_base = df_rank_base[~df_rank_base["PIC"].isin(pics_to_hide_real)]
 df_rank_base = df_rank_base[~df_rank_base["Kode_Dokter"].astype(str).isin(DOKTER_HIDDEN_KODE)]
 
 if len(sel_periode) > 1:
-    df_rank = df_rank_base.groupby(["Kode_Dokter","Nama_Dokter"], as_index=False).agg(
-        PIC=("PIC","first"), CD_Omzet=("CD_Omzet","sum"), CD_Pasien=("CD_Pasien","sum"),
+    df_rank = df_rank_base.groupby("Kode_Dokter", as_index=False).agg(
+        Nama_Dokter=("Nama_Dokter","first"), PIC=("PIC","first"),
+        CD_Omzet=("CD_Omzet","sum"), CD_Pasien=("CD_Pasien","sum"),
         SA_Omzet=("SA_Omzet","sum"), SA_Pasien=("SA_Pasien","sum"),
         Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum"),
         Jumlah_Bulan=("Periode","nunique")
     ).sort_values(by=sort_by, ascending=False)
 else:
+    df_rank_base = df_rank_base.drop_duplicates(subset=["Kode_Dokter"])
     df_rank = df_rank_base.sort_values(by=sort_by, ascending=False)
 
 df_rank = df_rank.reset_index(drop=True)
 df_rank.insert(0, "No", range(1, len(df_rank)+1))
-
 def highlight_top10(row):
     idx = row.name
     if idx < 3: return ['font-weight: bold; background-color: #FFF176; color: black'] * len(row)
@@ -207,13 +210,11 @@ def highlight_top10(row):
     else: return [''] * len(row)
 
 st.subheader(f"🏆 Ranking {sort_by} - {len(df_rank)} Dokter")
-st.markdown("🥇 No 1-3 Kuning Emas | No 4-10 Hijau Muda")
 st.dataframe(df_rank.style.apply(highlight_top10, axis=1), use_container_width=True, height=650, hide_index=True)
-
 buf=io.BytesIO()
 with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-    df_rank.to_excel(writer, index=False, sheet_name='Ranking')
-    ws = writer.sheets['Ranking']
+    df_rank.to_excel(writer, index=False, sheet_name='Ranking_FIX')
+    ws = writer.sheets['Ranking_FIX']
     fill_gold = PatternFill(start_color="FFF176", end_color="FFF176", fill_type="solid")
     fill_green = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")
     font_bold = Font(bold=True)
@@ -222,4 +223,4 @@ with pd.ExcelWriter(buf, engine='openpyxl') as writer:
             cell = ws.cell(row=r_idx, column=c)
             cell.font = font_bold
             cell.fill = fill_gold if r_idx <= 4 else fill_green
-st.download_button("📥 Export Excel Rapi", data=buf.getvalue(), file_name=f"Ranking_Rapi_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+st.download_button("📥 Export Excel FIX", data=buf.getvalue(), file_name=f"Ranking_FIX_{'_'.join(sel_periode)}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
