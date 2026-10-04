@@ -1,5 +1,5 @@
 streamlit
+PyMuPDF
 pandas
 openpyxl
-PyMuPDF
-matplotlib
+requests
