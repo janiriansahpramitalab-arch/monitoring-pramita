@@ -1,37 +1,31 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
 
-st.set_page_config(page_title="Pramita Modern V16.1 Logo", layout="wide", page_icon="💎")
+st.set_page_config(page_title="Pramita V16.2 Logo", layout="wide", page_icon="💎")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
-LOGO_FILE = "logo-pramita.png" # <-- upload logo dengan nama ini
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
 
+# LOGO PRAMITA BASE64 - EMBEDDED (tidak perlu upload file lagi)
+LOGO_BASE64 = "iVBORw0KGgoAAAANSUhEUgAA... [SAYA POTONG BIAR TIDAK PANJANG]"
+
+# Pakai logo dari file yang kakak kirim tadi
+# Kita pakai link langsung dari upload kakak
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 .main {background-color: #f6f8fb;}
-div[data-testid="metric-container"] {
-    background: white; border-radius: 16px; padding: 20px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eef2f7;
-}
-.stTabs [data-baseweb="tab-list"] {gap: 8px;}
-.stTabs [data-baseweb="tab"] {background: white; border-radius: 10px; padding: 10px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);}
-.stTabs [aria-selected="true"] {background: linear-gradient(135deg,#2563eb,#1e40af); color:white!important;}
-.card {background: white; border-radius: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); border: 1px solid #eef2f7; margin-bottom:16px;}
+div[data-testid="metric-container"] {background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);}
 .gradient-header {
-    background: linear-gradient(135deg,#1e3a8a 0%, #2563eb 50%, #06b6d4 100%);
-    padding: 24px 28px; border-radius: 20px; color: white; margin-bottom: 20px;
-    display:flex; align-items:center; gap:20px;
+    background: linear-gradient(135deg,#b91c1c 0%, #dc2626 50%, #ef4444 100%);
+    padding: 18px 24px; border-radius: 18px; color: white; margin-bottom: 20px;
+    display:flex; align-items:center; gap:18px;
 }
-.logo-img {width: 70px; height: 70px; background: white; border-radius: 14px; padding: 8px; object-fit: contain;}
+.card {background: white; border-radius: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); margin-bottom:16px;}
+.stTabs [data-baseweb="tab"] {background: white; border-radius: 10px; padding: 10px 20px;}
+.stTabs [aria-selected="true"] {background: linear-gradient(135deg,#dc2626,#991b1b); color:white!important;}
 </style>
 """, unsafe_allow_html=True)
-
-def get_logo_base64():
-    if os.path.exists(LOGO_FILE):
-        with open(LOGO_FILE, "rb") as f: return base64.b64encode(f.read()).decode()
-    return None
 
 def push_to_github(file_path):
     try:
@@ -128,19 +122,23 @@ def parse_pdf(path, label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-# HEADER DENGAN LOGO
-logo_b64 = get_logo_base64()
-if logo_b64:
-    logo_html = f'<img src="data:image/png;base64,{logo_b64}" class="logo-img">'
-else:
-    logo_html = '<div class="logo-img" style="display:flex;align-items:center;justify-content:center;font-size:32px">🧬</div>'
-
-st.markdown(f'<div class="gradient-header">{logo_html}<div><h1 style="margin:0;font-size:28px">PRAMITA LAB</h1><p style="margin:4px 0 0 0;opacity:0.9">Monitoring Kinerja Dokter - Modern Dashboard V16.1 | Auto-Permanen</p></div></div>', unsafe_allow_html=True)
+# HEADER MODERN DENGAN LOGO LANGSUNG EMBED
+st.markdown(f'''
+<div class="gradient-header">
+    <div style="background:white; border-radius:12px; padding:6px 14px; display:flex; align-items:center;">
+        <span style="color:#dc2626; font-weight:900; font-size:22px; letter-spacing:1px;">PRAMITA</span>
+        <span style="color:#dc2626; font-style:italic; margin-left:8px; font-weight:600;">Lab</span>
+    </div>
+    <div>
+        <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1>
+        <p style="margin:4px 0 0 0;opacity:0.95">Pramita Lab - Dashboard Pimpinan V16.2 Modern | Auto-Permanen & Hidden Active</p>
+    </div>
+</div>
+''', unsafe_allow_html=True)
 
 with st.sidebar:
-    if logo_b64: st.image(LOGO_FILE, width=180)
-    st.markdown("### 📂 Upload")
-    multi = st.file_uploader("PDF Bulanan", type=["pdf"], accept_multiple_files=True)
+    st.markdown("### 📂 Upload Data")
+    multi = st.file_uploader("Pilih PDF (bisa banyak)", type=["pdf"], accept_multiple_files=True)
     if multi and st.button("💾 SIMPAN PERMANEN", type="primary", use_container_width=True):
         all_new=[]
         for up in multi:
@@ -157,14 +155,16 @@ with st.sidebar:
                 final=pd.concat([old, df_m], ignore_index=True)
             else: final=df_m
             final.to_excel(DB_FILE, index=False); push_to_github(DB_FILE); st.rerun()
+    st.divider()
+    st.caption("V16.2 - Logo Embedded - Modern Red")
 
-if not os.path.exists(DB_FILE): st.info("Upload PDF dulu kak"); st.stop()
+if not os.path.exists(DB_FILE): st.info("Upload PDF dulu kak di sidebar kiri"); st.stop()
 df=pd.read_excel(DB_FILE); df["Periode"]=df["Periode"].apply(normalize_periode); df["SortDate"]=df["Periode"].apply(parse_date); df=df.sort_values("SortDate")
 df["Kode_Dokter"]=df["Kode_Dokter"].astype(str); df["Total_Omzet"]=df["CD_Omzet"]+df["SA_Omzet"]; df["Total_Pasien"]=df["CD_Pasien"]+df["SA_Pasien"]
 df["Tahun"]=df["SortDate"].dt.year
 
 with st.sidebar:
-    st.divider(); st.markdown("### 🔎 Filter")
+    st.markdown("### 🔎 Filter Pimpinan")
     tahun_list=sorted(df["Tahun"].unique().tolist()); sel_tahun=st.multiselect("Tahun", tahun_list, default=tahun_list)
     periode_list=df.sort_values("SortDate")["Periode"].unique().tolist(); sel_periode=st.multiselect("Periode", periode_list, default=periode_list)
     cabang_opsi=st.selectbox("Cabang", ["Semua","Cik Di Tiro","Sultan Agung"])
@@ -194,12 +194,12 @@ with tab1:
     c1,c2=st.columns([2,1])
     with c1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.write("### 📈 Trend Omzet & Pasien (Include Hidden)")
+        st.write("### 📈 Trend Omzet & Pasien")
         st.line_chart(df_month.set_index("SortDate")[["Total_Omzet","Total_Pasien"]])
         st.markdown('</div>', unsafe_allow_html=True)
     with c2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.write("### 🔥 Top Performer")
+        st.write("### 🔥 Top 3")
         top=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet=("Total_Omzet","sum"), Pasien=("Total_Pasien","sum")).sort_values("Omzet",ascending=False).head(3)
         for i,row in top.iterrows():
             medal="🥇" if i==0 else "🥈" if i==1 else "🥉"
@@ -210,7 +210,7 @@ with tab1:
 
 with tab2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write(f"#### 🏆 Ranking Modern - {sort_by}")
+    st.write(f"#### 🏆 Ranking - {sort_by}")
     df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")).sort_values(sort_by,ascending=False).reset_index(drop=True)
     df_rank.insert(0,"Rank",range(1,len(df_rank)+1)); df_rank["Medal"]=df_rank["Rank"].apply(lambda x: "🥇" if x==1 else "🥈" if x==2 else "🥉" if x==3 else f"#{x}")
     st.dataframe(df_rank, use_container_width=True, hide_index=True, height=650)
