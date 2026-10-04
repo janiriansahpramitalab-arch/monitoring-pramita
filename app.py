@@ -1,10 +1,13 @@
 import fitz, pandas as pd, os, base64, requests
 import streamlit as st
 
-st.set_page_config(page_title="Monitoring Pramita V15 Full", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Monitoring Pramita V15.1 Hidden", layout="wide", page_icon="📊")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 
-# === AUTO BACKUP GITHUB ===
+# === DATA YANG DISEMBUNYIKAN (TAPI TETAP DIHITUNG TOTAL) ===
+HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
+HIDDEN_KODE = ["2741002000"]
+
 def push_to_github(file_path):
     try:
         token = st.secrets.get("GITHUB_TOKEN")
@@ -104,15 +107,13 @@ def parse_pdf(path, label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-# === UI ===
-st.title("📊 MONITORING KINERJA DOKTER PRAMITA - V15 FULL")
+st.title("📊 MONITORING KINERJA DOKTER PRAMITA - V15.1")
 has_token = "GITHUB_TOKEN" in st.secrets
 
 with st.sidebar:
     st.header("📂 Upload Data Bulanan")
     if has_token: st.success("✅ Auto-permanen AKTIF")
-    else: st.error("⚠️ Secrets belum setting")
-    multi = st.file_uploader("Pilih PDF (bisa banyak sekaligus)", type=["pdf"], accept_multiple_files=True)
+    multi = st.file_uploader("Pilih PDF (bisa banyak)", type=["pdf"], accept_multiple_files=True)
     if multi and st.button("💾 SIMPAN PERMANEN", type="primary"):
         all_new=[]
         for up in multi:
@@ -120,30 +121,27 @@ with st.sidebar:
             for b in BULAN_FULL.keys():
                 if b in fname: pg=f"{BULAN_FULL[b]}-{ths}"; break
             open("temp.pdf","wb").write(up.getbuffer())
-            df_t=parse_pdf("temp.pdf", pg); df_t["File"]=up.name; all_new.append(df_t)
+            df_t=parse_pdf("temp.pdf", pg); all_new.append(df_t)
         if all_new:
             df_m=pd.concat(all_new, ignore_index=True)
             if os.path.exists(DB_FILE):
                 old=pd.read_excel(DB_FILE); old["Periode"]=old["Periode"].apply(normalize_periode)
                 for per in df_m["Periode"].unique(): old=old[old["Periode"]!=per]
-                final=pd.concat([old, df_m.drop(columns=["File"])], ignore_index=True)
-            else: final=df_m.drop(columns=["File"])
+                final=pd.concat([old, df_m], ignore_index=True)
+            else: final=df_m
             final["Total_Omzet"]=final["CD_Omzet"]+final["SA_Omzet"]; final["Total_Pasien"]=final["CD_Pasien"]+final["SA_Pasien"]
             final.to_excel(DB_FILE, index=False)
-            if has_token:
-                ok, msg = push_to_github(DB_FILE)
-                st.success(msg) if ok else st.error(msg)
+            if has_token: ok, msg = push_to_github(DB_FILE); st.success(msg) if ok else st.error(msg)
             st.rerun()
 
 if not os.path.exists(DB_FILE):
-    st.info("Database kosong. Upload PDF dulu di sidebar."); st.stop()
+    st.info("Database kosong. Upload PDF dulu."); st.stop()
 
 df=pd.read_excel(DB_FILE)
 df["Periode"]=df["Periode"].apply(normalize_periode); df["SortDate"]=df["Periode"].apply(parse_date); df=df.sort_values("SortDate")
 df["Kode_Dokter"]=df["Kode_Dokter"].astype(str); df["Total_Omzet"]=df["CD_Omzet"]+df["SA_Omzet"]; df["Total_Pasien"]=df["CD_Pasien"]+df["SA_Pasien"]
 df["Tahun"]=df["SortDate"].dt.year; df["Bulan"]=df["Periode"].apply(lambda x: x.split("-")[0])
 
-# SIDEBAR FILTER
 with st.sidebar:
     st.divider(); st.subheader("🔎 Filter Pimpinan")
     tahun_list=sorted(df["Tahun"].unique().tolist()); sel_tahun=st.multiselect("Tahun", tahun_list, default=tahun_list)
@@ -152,64 +150,56 @@ with st.sidebar:
     pic_list=["Semua"]+sorted(df["PIC"].dropna().unique().tolist()); sel_pic=st.selectbox("PIC", pic_list)
     sort_by=st.selectbox("Urut Ranking", ["Total_Omzet","Total_Pasien","CD_Omzet","SA_Omzet"])
 
-df_f=df[df["Periode"].isin(sel_periode)] if sel_periode else df
-if sel_tahun: df_f=df_f[df_f["Tahun"].isin(sel_tahun)]
-if sel_pic!="Semua": df_f=df_f[df_f["PIC"]==sel_pic]
-if cabang_opsi=="Cik Di Tiro": df_f["Omzet_View"]=df_f["CD_Omzet"]; df_f["Pasien_View"]=df_f["CD_Pasien"]
-elif cabang_opsi=="Sultan Agung": df_f["Omzet_View"]=df_f["SA_Omzet"]; df_f["Pasien_View"]=df_f["SA_Pasien"]
-else: df_f["Omzet_View"]=df_f["Total_Omzet"]; df_f["Pasien_View"]=df_f["Total_Pasien"]
+# FILTER UTAMA
+df_all=df[df["Periode"].isin(sel_periode)] if sel_periode else df
+if sel_tahun: df_all=df_all[df_all["Tahun"].isin(sel_tahun)]
+if sel_pic!="Semua": df_all=df_all[df_all["PIC"]==sel_pic]
 
-# === KPI ===
-total_omzet=df_f["Total_Omzet"].sum(); total_pasien=df_f["Total_Pasien"].sum(); jml_dokter=df_f["Kode_Dokter"].nunique()
-# Growth MoM
+# KPI PAKAI DATA LENGKAP (TERMASUK YANG DISEMBUNYIKAN)
+df_kpi = df_all.copy()
+total_omzet=df_kpi["Total_Omzet"].sum(); total_pasien=df_kpi["Total_Pasien"].sum(); jml_dokter=df_kpi["Kode_Dokter"].nunique()
 df_month=df.groupby("SortDate",as_index=False).agg(Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum")).sort_values("SortDate")
 df_month["Omzet_Growth"]=df_month["Total_Omzet"].pct_change()*100; df_month["Pasien_Growth"]=df_month["Total_Pasien"].pct_change()*100
 last_growth_omzet=df_month["Omzet_Growth"].iloc[-1] if len(df_month)>1 else 0
 last_growth_pasien=df_month["Pasien_Growth"].iloc[-1] if len(df_month)>1 else 0
 
+# DATA TAMPILAN (TANPA YANG DISEMBUNYIKAN)
+df_f = df_all[~df_all["PIC"].str.upper().isin(HIDDEN_PIC)]
+df_f = df_f[~df_f["Kode_Dokter"].isin(HIDDEN_KODE)]
+
+if cabang_opsi=="Cik Di Tiro": df_f["Omzet_View"]=df_f["CD_Omzet"]
+elif cabang_opsi=="Sultan Agung": df_f["Omzet_View"]=df_f["SA_Omzet"]
+else: df_f["Omzet_View"]=df_f["Total_Omzet"]
+
 c1,c2,c3,c4,c5=st.columns(5)
 c1.metric("TOTAL OMZET", f"Rp {total_omzet/1_000_000:.1f} jt" if total_omzet<1_000_000_000 else f"Rp {total_omzet/1_000_000_000:.2f} M")
 c2.metric("TOTAL PASIEN", f"{total_pasien:,}")
-c3.metric("JUMLAH DOKTER", f"{jml_dokter}")
-c4.metric("OMZET vs BULAN LALU", f"{last_growth_omzet:.1f}%", delta=f"{last_growth_omzet:.1f}%")
-c5.metric("PASIEN vs BULAN LALU", f"{last_growth_pasien:.1f}%", delta=f"{last_growth_pasien:.1f}%")
+c3.metric("JUMLAH DOKTER", f"{jml_dokter} (tampil {df_f['Kode_Dokter'].nunique()})")
+c4.metric("OMZET vs BULAN LALU", f"{last_growth_omzet:.1f}%")
+c5.metric("PASIEN vs BULAN LALU", f"{last_growth_pasien:.1f}%")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Dashboard Pimpinan","📈 Trend Omzet & Pasien","🏆 Ranking","📅 Perbandingan Tahun","👨‍⚕️ Detail Dokter"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Dashboard Pimpinan","📈 Trend","🏆 Ranking","📅 YoY","👨‍⚕️ Detail Dokter"])
 
 with tab1:
-    st.subheader("Trend Bulanan")
     c_a,c_b=st.columns(2)
-    with c_a:
-        st.write("**Trend Omzet**")
-        chart_omzet=df_month.set_index("SortDate")[["Total_Omzet"]]
-        st.line_chart(chart_omzet)
-    with c_b:
-        st.write("**Trend Pasien**")
-        chart_pasien=df_month.set_index("SortDate")[["Total_Pasien"]]
-        st.line_chart(chart_pasien)
+    with c_a: st.write("**Trend Omzet**"); st.line_chart(df_month.set_index("SortDate")[["Total_Omzet"]])
+    with c_b: st.write("**Trend Pasien**"); st.line_chart(df_month.set_index("SortDate")[["Total_Pasien"]])
     st.divider()
-    # Top Performer
     top_omzet=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet=("Total_Omzet","sum")).sort_values("Omzet",ascending=False).head(3)
     top_pasien=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama=("Nama_Dokter","first"), Pasien=("Total_Pasien","sum")).sort_values("Pasien",ascending=False).head(3)
-    cc1,cc2,cc3=st.columns(3)
-    cc1.write("**🔥 TOP OMZET**"); cc1.dataframe(top_omzet, hide_index=True)
-    cc2.write("**👥 TOP PASIEN**"); cc2.dataframe(top_pasien, hide_index=True)
-    # Growth
-    if len(df_month)>=2:
-        df_g=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet=("Total_Omzet","sum"))
-        cc3.write("**🚀 Perlu Dipantau (Growth)**"); cc3.write("Bulan ini vs bulan lalu + ada di ranking growth")
-    st.dataframe(df_f.head(20), use_container_width=True)
+    cc1,cc2=st.columns(2)
+    cc1.write("**🔥 TOP OMZET (tanpa hidden)**"); cc1.dataframe(top_omzet, hide_index=True)
+    cc2.write("**👥 TOP PASIEN (tanpa hidden)**"); cc2.dataframe(top_pasien, hide_index=True)
 
 with tab2:
-    st.subheader("Trend Omzet & Pasien per Bulan")
-    df_trend=df.groupby(["Periode","SortDate"],as_index=False).agg(Omzet=("Total_Omzet","sum"), Pasien=("Total_Pasien","sum")).sort_values("SortDate")
-    st.line_chart(df_trend.set_index("Periode")[["Omzet","Pasien"]])
+    df_trend=df_f.groupby(["Periode","SortDate"],as_index=False).agg(Omzet=("Total_Omzet","sum"), Pasien=("Total_Pasien","sum")).sort_values("SortDate")
+    st.line_chart(df_trend.set_index("Periode")[["Omzet"]])
     st.dataframe(df_trend, hide_index=True)
 
 with tab3:
-    st.subheader(f"Ranking Otomatis - Urut {sort_by} Tertinggi ke Terkecil")
+    st.subheader(f"Ranking Otomatis - {sort_by} (Hidden tetap dihitung tapi tidak tampil)")
     if len(sel_periode)>1:
-        df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum"),Bulan=("Periode","nunique")).sort_values(sort_by,ascending=False)
+        df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")).sort_values(sort_by,ascending=False)
     else:
         df_rank=df_f.drop_duplicates("Kode_Dokter").sort_values(sort_by,ascending=False)
     df_rank=df_rank.reset_index(drop=True); df_rank.insert(0,"Rank",range(1,len(df_rank)+1))
@@ -217,30 +207,22 @@ with tab3:
     st.dataframe(df_rank.style.apply(hl,axis=1), use_container_width=True, hide_index=True, height=700)
 
 with tab4:
-    st.subheader("Perbandingan Tahun ke Tahun")
-    dokter_search=st.selectbox("Pilih Dokter untuk YoY", ["-"]+sorted(df["Nama_Dokter"].unique().tolist()))
+    dokter_search=st.selectbox("Pilih Dokter untuk YoY", ["-"]+sorted(df_f["Nama_Dokter"].unique().tolist()))
     if dokter_search!="-":
-        d=df[df["Nama_Dokter"]==dokter_search].copy()
+        d=df_f[df_f["Nama_Dokter"]==dokter_search].copy()
         pivot=d.pivot_table(index="Bulan", columns="Tahun", values=["Total_Omzet","Total_Pasien"], aggfunc="sum").fillna(0)
-        st.write(f"**Histori {dokter_search}**")
         st.dataframe(pivot, use_container_width=True)
-        st.line_chart(d.groupby(["Tahun","Bulan"],as_index=False).agg(Omzet=("Total_Omzet","sum")).pivot(index="Bulan", columns="Tahun", values="Omzet"))
 
 with tab5:
-    st.subheader("🔎 Detail & Pencarian Dokter")
-    q=st.text_input("Ketik nama dokter / kode dokter")
+    q=st.text_input("Ketik nama dokter / kode dokter (hidden tidak akan muncul)")
     if q:
-        res=df[df["Nama_Dokter"].str.contains(q,case=False,na=False) | df["Kode_Dokter"].str.contains(q,case=False,na=False)].sort_values("SortDate")
+        # search hanya di yang tidak hidden
+        res=df_f[df_f["Nama_Dokter"].str.contains(q,case=False,na=False) | df_f["Kode_Dokter"].str.contains(q,case=False,na=False)].sort_values("SortDate")
         if not res.empty:
             kode=res["Kode_Dokter"].iloc[0]; nama=res["Nama_Dokter"].iloc[0]
             st.write(f"### {nama} - {kode}")
             hist=res.groupby("Periode",as_index=False).agg(CD=("CD_Omzet","sum"),SA=("SA_Omzet","sum"),Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum"),Date=("SortDate","first")).sort_values("Date")
-            c1,c2=st.columns(2)
-            c1.metric("Total Omzet", f"Rp {hist['Total'].sum():,}")
-            c2.metric("Total Pasien", f"{hist['Pasien'].sum():,}")
-            st.line_chart(hist.set_index("Periode")[["Total","Pasien"]])
+            st.line_chart(hist.set_index("Periode")[["Total"]])
             st.dataframe(hist, hide_index=True, use_container_width=True)
         else:
-            st.warning("Tidak ditemukan")
-    else:
-        st.info("Ketik di atas untuk melihat histori dokter dari bulan ke bulan")
+            st.warning("Tidak ditemukan / data disembunyikan")
