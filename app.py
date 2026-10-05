@@ -1,7 +1,6 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
-import altair as alt
 
-st.set_page_config(page_title="Pramita V16.7 Urut Fix", layout="wide", page_icon="✅")
+st.set_page_config(page_title="Pramita V16.8 Anti Error", layout="wide", page_icon="✅")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
@@ -14,9 +13,6 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 div[data-testid="metric-container"] {background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eef2f7;}
 .gradient-header {background: linear-gradient(135deg,#b91c1c 0%, #dc2626 50%, #ef4444 100%); padding: 18px 24px; border-radius: 18px; color: white; margin-bottom: 20px; display:flex; align-items:center; gap:18px;}
 .card {background: white; border-radius: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); border: 1px solid #eef2f7; margin-bottom:16px;}
-.stTabs [data-baseweb="tab-list"] {gap: 8px;}
-.stTabs [data-baseweb="tab"] {background: white; border-radius: 10px; padding: 10px 20px;}
-.stTabs [aria-selected="true"] {background: linear-gradient(135deg,#dc2626,#991b1b); color:white!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -123,7 +119,7 @@ st.markdown(f'''
     </div>
     <div>
         <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1>
-        <p style="margin:4px 0 0 0;opacity:0.95">V16.7 Grafik Urut Januari-Desember FIXED</p>
+        <p style="margin:4px 0 0 0;opacity:0.95">V16.8 Anti Error - Grafik Urut JANUARI-DESEMBER Final</p>
     </div>
 </div>
 ''', unsafe_allow_html=True)
@@ -169,10 +165,9 @@ df_kpi=df_all.copy()
 df_f=df_all[~df_all["PIC"].str.upper().isin(HIDDEN_PIC)]; df_f=df_f[~df_f["Kode_Dokter"].isin(HIDDEN_KODE)]
 
 total_omzet=df_kpi["Total_Omzet"].sum(); total_pasien=df_kpi["Total_Pasien"].sum(); jml_dokter=df_kpi["Kode_Dokter"].nunique()
-
-# FIX URUT: Buat list urut yang benar JANUARI-2026, FEBRUARI-2026 dst
+# URUTAN BAKU JADI ACUAN
 periode_urut = df.sort_values("SortDate")["Periode"].unique().tolist()
-df_month=df.groupby(["SortDate","Periode"],as_index=False).agg(Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum")).sort_values("SortDate")
+df_month=df_all.groupby(["SortDate","Periode"],as_index=False).agg(Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum")).sort_values("SortDate")
 
 k1,k2,k3,k4=st.columns(4)
 k1.metric("💰 TOTAL OMZET", f"Rp {total_omzet/1_000_000_000:.2f} M")
@@ -183,27 +178,14 @@ k4.metric("📅 PERIODE", f"{len(periode_list_sorted)} Bulan")
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🏆 Ranking", "📈 Analytics", "👨‍⚕️ Detail"])
 
 with tab1:
-    c1,c2=st.columns([2,1])
-    with c1:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.write("### 📈 Trend Omzet (JANUARI -> DESEMBER URUT)")
-        chart1 = alt.Chart(df_month).mark_line(point=True).encode(
-            x=alt.X('Periode:N', sort=periode_urut, title='Periode'),
-            y=alt.Y('Total_Omzet:Q', title='Omzet'),
-            tooltip=['Periode','Total_Omzet']
-        ).properties(height=300)
-        st.altair_chart(chart1, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.write("### 🔥 Top 3 Performer")
-        top=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet=("Total_Omzet","sum"), Pasien=("Total_Pasien","sum")).sort_values("Omzet",ascending=False).head(3)
-        for i,row in top.iterrows():
-            medal="🥇" if i==0 else "🥈" if i==1 else "🥉"
-            st.write(f"{medal} **{row['Nama'][:28]}**")
-            st.caption(f"Rp {row['Omzet']:,} | {row['Pasien']} pasien")
-            st.divider()
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.write("### 📈 Trend Omzet (JANUARI -> DESEMBER URUT)")
+    # FIX PAKSA URUT: buat dataframe dengan Periode sebagai categorical urut
+    df_chart = df_month.copy()
+    df_chart["Periode"] = pd.Categorical(df_chart["Periode"], categories=periode_urut, ordered=True)
+    df_chart = df_chart.sort_values("Periode")
+    st.line_chart(df_chart.set_index("Periode")[["Total_Omzet"]])
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with tab2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -223,15 +205,11 @@ with tab2:
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 📊 Per Cabang (Urut Januari-Desember)")
+    st.write("### 📊 Per Cabang (Urut JANUARI-DESEMBER)")
     df_cabang=df_f.groupby(["SortDate","Periode"],as_index=False).agg(CD=("CD_Omzet","sum"), SA=("SA_Omzet","sum")).sort_values("SortDate")
-    chart3 = alt.Chart(df_cabang).transform_fold(['CD','SA'], as_=['Cabang','Omzet']).mark_bar().encode(
-        x=alt.X('Periode:N', sort=periode_urut),
-        y='Omzet:Q',
-        color='Cabang:N',
-        tooltip=['Periode','Cabang','Omzet']
-    )
-    st.altair_chart(chart3, use_container_width=True)
+    df_cabang["Periode"] = pd.Categorical(df_cabang["Periode"], categories=periode_urut, ordered=True)
+    df_cabang = df_cabang.sort_values("Periode")
+    st.bar_chart(df_cabang.set_index("Periode")[["CD","SA"]])
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab4:
@@ -241,15 +219,12 @@ with tab4:
         res=df_f[df_f["Nama_Dokter"].str.contains(q,case=False,na=False) | df_f["Kode_Dokter"].str.contains(q,case=False,na=False)].copy()
         if not res.empty:
             hist=res.groupby(["SortDate","Periode"],as_index=False).agg(Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
-            periode_dokter_urut = hist["Periode"].tolist() # sudah urut SortDate
+            # FIX PAKSA URUT JANUARI-DESEMBER
+            hist["Periode"] = pd.Categorical(hist["Periode"], categories=periode_urut, ordered=True)
+            hist = hist.sort_values("Periode")
             st.write(f"#### Grafik {q} - URUT JANUARI->DESEMBER")
-            chart4 = alt.Chart(hist).mark_line(point=True, color='#2563eb').encode(
-                x=alt.X('Periode:N', sort=periode_dokter_urut, title='Periode (JANUARI-2026)'),
-                y=alt.Y('Total:Q', title='Omzet'),
-                tooltip=['Periode','Total','Pasien']
-            ).properties(height=350)
-            st.altair_chart(chart4, use_container_width=True)
-            display_df = hist.sort_values("SortDate")[["Periode","Total","Pasien"]]
+            st.line_chart(hist.set_index("Periode")[["Total"]])
+            display_df = hist[["Periode","Total","Pasien"]].sort_values("Periode")
             st.dataframe(display_df, use_container_width=True, hide_index=True)
         else: st.warning("Tidak ditemukan / hidden")
     st.markdown('</div>', unsafe_allow_html=True)
