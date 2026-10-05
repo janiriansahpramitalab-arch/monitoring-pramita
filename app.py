@@ -1,6 +1,6 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
 
-st.set_page_config(page_title="Pramita V16.5 Label Bulan", layout="wide", page_icon="📅")
+st.set_page_config(page_title="Pramita V16.6 Final Fix", layout="wide", page_icon="✅")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
@@ -14,7 +14,7 @@ div[data-testid="metric-container"] {background: white; border-radius: 16px; pad
 .gradient-header {background: linear-gradient(135deg,#b91c1c 0%, #dc2626 50%, #ef4444 100%); padding: 18px 24px; border-radius: 18px; color: white; margin-bottom: 20px; display:flex; align-items:center; gap:18px;}
 .card {background: white; border-radius: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); border: 1px solid #eef2f7; margin-bottom:16px;}
 .stTabs [data-baseweb="tab-list"] {gap: 8px;}
-.stTabs [data-baseweb="tab"] {background: white; border-radius: 10px; padding: 10px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);}
+.stTabs [data-baseweb="tab"] {background: white; border-radius: 10px; padding: 10px 20px;}
 .stTabs [aria-selected="true"] {background: linear-gradient(135deg,#dc2626,#991b1b); color:white!important;}
 </style>
 """, unsafe_allow_html=True)
@@ -122,7 +122,7 @@ st.markdown(f'''
     </div>
     <div>
         <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1>
-        <p style="margin:4px 0 0 0;opacity:0.95">V16.5 Label Bulan Fix Januari-2026 | Support Januari-2025 juga</p>
+        <p style="margin:4px 0 0 0;opacity:0.95">V16.6 Fix Urut & Error - Final</p>
     </div>
 </div>
 ''', unsafe_allow_html=True)
@@ -182,8 +182,7 @@ with tab1:
     c1,c2=st.columns([2,1])
     with c1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.write("### 📈 Trend Omzet (Urut Januari-2026)")
-        # FIX: pakai Periode sebagai label, tapi tetap urut pakai SortDate
+        st.write("### 📈 Trend Omzet (Urut JANUARI-2026)")
         st.line_chart(df_month.set_index("Periode")[["Total_Omzet","Total_Pasien"]])
         st.markdown('</div>', unsafe_allow_html=True)
     with c2:
@@ -226,10 +225,12 @@ with tab4:
     if q:
         res=df_f[df_f["Nama_Dokter"].str.contains(q,case=False,na=False) | df_f["Kode_Dokter"].str.contains(q,case=False,na=False)].copy()
         if not res.empty:
+            # FIX TOTAL: Group lalu sort, lalu tampilkan JANUARI-2026 urut
             hist=res.groupby(["SortDate","Periode"],as_index=False).agg(Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
-            st.write(f"#### Grafik {q} - Urut JANUARI-2026")
-            # FIX UTAMA: pakai Periode sebagai index, jadi tampil JANUARI-2026 saja
+            st.write(f"#### Grafik {q} - Urut JANUARI-2026 (Fix)")
             st.line_chart(hist.set_index("Periode")[["Total"]])
-            st.dataframe(hist[["Periode","Total","Pasien"]].sort_values("SortDate"), use_container_width=True, hide_index=True)
+            # FIX ERROR: Sort dulu baru select kolom
+            display_df = hist.sort_values("SortDate")[["Periode","Total","Pasien"]]
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
         else: st.warning("Tidak ditemukan / hidden")
     st.markdown('</div>', unsafe_allow_html=True)
