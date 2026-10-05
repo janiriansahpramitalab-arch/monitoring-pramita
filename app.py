@@ -1,11 +1,12 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
 
-st.set_page_config(page_title="Pramita V18.2 Fix Only", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="Pramita V18.4 FINAL", layout="wide", page_icon="🚀")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
 APP_PASSWORD = st.secrets.get("APP_PASSWORD", "pramita123")
 
+# LOGIN
 if "authenticated" not in st.session_state: st.session_state.authenticated = False
 if not st.session_state.authenticated:
     st.markdown("<div style='text-align:center; padding:60px 20px;'><div style='background:white; border-radius:20px; padding:40px; max-width:400px; margin:auto; box-shadow:0 10px 40px rgba(0,0,0,0.1);'><h1 style='color:#dc2626;'>🔐 LOGIN PRAMITA</h1><p>Monitoring Kinerja Dokter</p></div></div>", unsafe_allow_html=True)
@@ -52,6 +53,26 @@ def fmt_titik(x):
 def fmt_rp(x):
     try: return f"Rp {int(float(x)):,}".replace(",", ".")
     except: return "Rp 0"
+
+def auto_repair_database(df_input):
+    """Perbaiki data yang ketuker omzet vs pasien"""
+    def fix(r):
+        try:
+            # Jika pasien >1000 dan omzet <1000 -> ketuker, tuker balik
+            if r["Total_Pasien"] > 1000 and r["Total_Omzet"] < 1000:
+                r["Total_Omzet"], r["Total_Pasien"] = r["Total_Pasien"], r["Total_Omzet"]
+                r["CD_Omzet"], r["CD_Pasien"] = r["CD_Pasien"], r["CD_Omzet"]
+                r["SA_Omzet"], r["SA_Pasien"] = r["SA_Pasien"], r["SA_Omzet"]
+            # Fix CD
+            if r["CD_Pasien"] > 2000 and r["CD_Omzet"] < 100:
+                r["CD_Omzet"], r["CD_Pasien"] = r["CD_Pasien"], r["CD_Omzet"]
+            if r["SA_Pasien"] > 2000 and r["SA_Omzet"] < 100:
+                r["SA_Omzet"], r["SA_Pasien"] = r["SA_Pasien"], r["SA_Omzet"]
+            r["Total_Omzet"] = r["CD_Omzet"] + r["SA_Omzet"]
+            r["Total_Pasien"] = r["CD_Pasien"] + r["SA_Pasien"]
+        except: pass
+        return r
+    return df_input.apply(fix, axis=1)
 
 BULAN_FULL = {"JANU":"JANUARI","JAN":"JANUARI","FEBR":"FEBRUARI","FEB":"FEBRUARI","MAR":"MARET","MARET":"MARET","APRIL":"APRIL","APR":"APRIL","MEI":"MEI","JUNI":"JUNI","JUN":"JUNI","JULI":"JULI","JUL":"JULI","AGUS":"AGUSTUS","AGU":"AGUSTUS","SEPT":"SEPTEMBER","SEP":"SEPTEMBER","OKTO":"OKTOBER","OKT":"OKTOBER","NOPE":"NOVEMBER","NOV":"NOVEMBER","DESE":"DESEMBER","DES":"DESEMBER"}
 BULAN_ANGKA = {"JANUARI":1,"FEBRUARI":2,"MARET":3,"APRIL":4,"MEI":5,"JUNI":6,"JULI":7,"AGUSTUS":8,"SEPTEMBER":9,"OKTOBER":10,"NOVEMBER":11,"DESEMBER":12}
@@ -132,11 +153,14 @@ def parse_pdf(path, label):
                     if buf: buf+=" "+line
             r=flush(buf,pic)
             if r: parsed.append(r)
-    return pd.DataFrame(parsed)
+    df_out = pd.DataFrame(parsed)
+    if not df_out.empty:
+        df_out = auto_repair_database(df_out)
+    return df_out
 
 c_head1, c_head2 = st.columns([6,1])
 with c_head1:
-    st.markdown(f'''<div class="gradient-header"><div style="display:flex; align-items:center; gap:18px;"><div style="background:white; border-radius:12px; padding:6px 14px; display:flex; align-items:center;"><span style="color:#dc2626; font-weight:900; font-size:22px; letter-spacing:1px;">PRAMITA</span><span style="color:#dc2626; font-style:italic; margin-left:8px; font-weight:600;">Lab</span></div><div><h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER V18.2</h1><p style="margin:4px 0 0 0;opacity:0.95">Tampilan V18.0 Cantik + Fix Banding & Detail Only</p></div></div></div>''', unsafe_allow_html=True)
+    st.markdown(f'''<div class="gradient-header"><div style="display:flex; align-items:center; gap:18px;"><div style="background:white; border-radius:12px; padding:6px 14px; display:flex; align-items:center;"><span style="color:#dc2626; font-weight:900; font-size:22px; letter-spacing:1px;">PRAMITA</span><span style="color:#dc2626; font-style:italic; margin-left:8px; font-weight:600;">Lab</span></div><div><h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING V18.4 FINAL</h1><p style="margin:4px 0 0 0;opacity:0.95">Fix Heatmap Konsisten - Tanpa Kata Orang</p></div></div></div>''', unsafe_allow_html=True)
 with c_head2:
     if st.button("🚪 Logout"): st.session_state.authenticated=False; st.rerun()
 
@@ -155,15 +179,20 @@ with st.sidebar:
             df_m=pd.concat(all_new, ignore_index=True)
             if os.path.exists(DB_FILE):
                 old=pd.read_excel(DB_FILE); old["Periode"]=old["Periode"].apply(normalize_periode)
+                old = auto_repair_database(old)
                 for per in df_m["Periode"].unique(): old=old[old["Periode"]!=per]
                 final=pd.concat([old, df_m], ignore_index=True)
             else: final=df_m
             final["Total_Omzet"]=final["CD_Omzet"]+final["SA_Omzet"]; final["Total_Pasien"]=final["CD_Pasien"]+final["SA_Pasien"]
+            final = auto_repair_database(final)
             final.to_excel(DB_FILE, index=False); push_to_github(DB_FILE); st.rerun()
 
 if not os.path.exists(DB_FILE): st.info("Upload PDF dulu kak"); st.stop()
 df=pd.read_excel(DB_FILE); df["Periode"]=df["Periode"].apply(normalize_periode); df["SortDate"]=df["Periode"].apply(parse_date); df=df.sort_values("SortDate")
-df["Kode_Dokter"]=df["Kode_Dokter"].astype(str); df["Total_Omzet"]=df["CD_Omzet"]+df["SA_Omzet"]; df["Total_Pasien"]=df["CD_Pasien"]+df["SA_Pasien"]
+df["Kode_Dokter"]=df["Kode_Dokter"].astype(str)
+# AUTO REPAIR SAAT LOAD
+df = auto_repair_database(df)
+df["Total_Omzet"]=df["CD_Omzet"]+df["SA_Omzet"]; df["Total_Pasien"]=df["CD_Pasien"]+df["SA_Pasien"]
 df["Tahun"]=df["SortDate"].dt.year
 
 with st.sidebar:
@@ -227,13 +256,12 @@ with tab2:
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 🔄 Perbandingan Bulan - FIXED")
-    mode = st.radio("Mode", ["2 Bulan (SEPTEMBER vs AGUSTUS)", "Rentang (JANUARI sampai OKTOBER)"], horizontal=True, key="mode_banding")
-
+    st.write("### 🔄 Perbandingan Bulan - Bisa 2 Bulan & Rentang")
+    mode = st.radio("Mode", ["2 Bulan (SEPTEMBER vs AGUSTUS)", "Rentang (JANUARI sampai OKTOBER)"], horizontal=True, key="mode_banding_v184")
     if mode == "2 Bulan (SEPTEMBER vs AGUSTUS)":
         c1,c2 = st.columns(2)
-        with c1: bulan1 = st.selectbox("Bulan Lama", periode_urut, index=max(0,len(periode_urut)-2), key="b1_fix")
-        with c2: bulan2 = st.selectbox("Bulan Baru", periode_urut, index=len(periode_urut)-1, key="b2_fix")
+        with c1: bulan1 = st.selectbox("Bulan Lama", periode_urut, index=max(0,len(periode_urut)-2), key="b1_v184")
+        with c2: bulan2 = st.selectbox("Bulan Baru", periode_urut, index=len(periode_urut)-1, key="b2_v184")
         if bulan1!=bulan2:
             df_b1 = df_f[df_f["Periode"]==bulan1].groupby("Kode_Dokter", as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet_1=("Total_Omzet","sum"), Pasien_1=("Total_Pasien","sum"))
             df_b2 = df_f[df_f["Periode"]==bulan2].groupby("Kode_Dokter", as_index=False).agg(Omzet_2=("Total_Omzet","sum"), Pasien_2=("Total_Pasien","sum"))
@@ -249,8 +277,7 @@ with tab3:
             df_disp["Persen_fmt"] = df_disp["Persen"].apply(lambda x: f"{x:.1f}%")
             st.dataframe(df_disp[["Nama","Kode_Dokter","Omzet_1","Omzet_2","Selisih_Omzet","Persen_fmt","Status"]], use_container_width=True, hide_index=True, height=500)
     else:
-        st.write("**Pilih Rentang (misal JANUARI-2026 sampai OKTOBER-2026)**")
-        rentang = st.multiselect("Pilih Bulan", periode_urut, default=periode_urut, key="rentang_fix")
+        rentang = st.multiselect("Pilih Bulan", periode_urut, default=periode_urut, key="rentang_v184")
         if len(rentang)>=2:
             rentang_sorted = [p for p in periode_urut if p in rentang]
             bulan_awal = rentang_sorted[0]; bulan_akhir = rentang_sorted[-1]
@@ -268,145 +295,88 @@ with tab3:
             df_r_disp["Persen_fmt"] = df_r_disp["Persen"].apply(lambda x: f"{x:.1f}%")
             st.write(f"**{bulan_awal} sampai {bulan_akhir} ({len(rentang_sorted)} bulan)**")
             st.dataframe(df_r_disp[["Nama_Dokter","Kode_Dokter","Total_Rentang","Awal","Akhir","Persen_fmt","Bulan_Aktif"]], use_container_width=True, hide_index=True, height=600)
-        else:
-            st.warning("Pilih minimal 2 bulan")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab4:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 👥 Analisa PIC - Siapa PIC Paling Jago?")
-    df_pic = df_f.groupby("PIC", as_index=False).agg(Jml_Dokter=("Kode_Dokter","nunique"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum")).sort_values("Total_Omzet", ascending=False)
-    df_pic["Avg_per_Dokter"] = df_pic["Total_Omzet"] / df_pic["Jml_Dokter"]
+    st.write("### 👥 Analisa PIC")
+    df_pic = df_f.groupby("PIC", as_index=False).agg(Jml_Dokter=("Kode_Dokter","nunique"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")).sort_values("Total_Omzet", ascending=False)
     st.bar_chart(df_pic.set_index("PIC")[["Total_Omzet"]])
     df_pic_disp = df_pic.copy()
-    for col in ["Total_Omzet","CD_Omzet","SA_Omzet","Avg_per_Dokter"]: df_pic_disp[col] = df_pic_disp[col].apply(fmt_titik)
+    df_pic_disp["Total_Omzet"] = df_pic_disp["Total_Omzet"].apply(fmt_titik)
     df_pic_disp["Total_Pasien"] = df_pic_disp["Total_Pasien"].apply(fmt_titik)
     st.dataframe(df_pic_disp, use_container_width=True, hide_index=True)
-    sel_pic_detail = st.selectbox("Pilih PIC untuk lihat dokter nya", df_pic["PIC"].tolist())
-    if sel_pic_detail:
-        df_pic_dok = df_f[df_f["PIC"]==sel_pic_detail].groupby("Kode_Dokter", as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet=("Total_Omzet","sum"), Pasien=("Total_Pasien","sum")).sort_values("Omzet", ascending=False)
-        df_pic_dok["Omzet"] = df_pic_dok["Omzet"].apply(fmt_titik)
-        st.dataframe(df_pic_dok, use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab5:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 🆕 Dokter Baru / Hilang (Churn Detection)")
-    if len(periode_urut) >= 2:
-        bulan_lama = periode_urut[-2]; bulan_baru = periode_urut[-1]
-        st.info(f"Membandingkan **{bulan_lama}** vs **{bulan_baru}**")
-        dokter_lama = set(df[df["Periode"]==bulan_lama]["Kode_Dokter"].unique())
-        dokter_baru = set(df[df["Periode"]==bulan_baru]["Kode_Dokter"].unique())
-        baru = dokter_baru - dokter_lama; hilang = dokter_lama - dokter_baru; tetap = dokter_baru & dokter_lama
-        k1,k2,k3 = st.columns(3)
-        k1.metric("✅ Tetap", f"{len(tetap)}"); k2.metric("🆕 Baru", f"{len(baru)}", delta=f"{len(baru)}"); k3.metric("❌ Hilang", f"{len(hilang)}", delta=f"-{len(hilang)}", delta_color="inverse")
-        colA,colB = st.columns(2)
-        with colA:
-            st.write(f"**🆕 Baru di {bulan_baru}:**")
+    st.write("### 🆕 Baru / Hilang")
+    if len(periode_urut)>=2:
+        bl_lama = periode_urut[-2]; bl_baru = periode_urut[-1]
+        dl = set(df[df["Periode"]==bl_lama]["Kode_Dokter"].unique())
+        db = set(df[df["Periode"]==bl_baru]["Kode_Dokter"].unique())
+        baru = db-dl; hilang = dl-db
+        c1,c2 = st.columns(2)
+        with c1:
+            st.write(f"🆕 Baru di {bl_baru}: {len(baru)}")
             if baru:
-                df_baru = df[df["Kode_Dokter"].isin(baru) & (df["Periode"]==bulan_baru)][["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]].drop_duplicates()
-                df_baru["Total_Omzet"] = df_baru["Total_Omzet"].apply(fmt_titik)
-                st.dataframe(df_baru, use_container_width=True, hide_index=True)
-        with colB:
-            st.write(f"**❌ Hilang:**")
+                df_b = df[(df["Kode_Dokter"].isin(baru)) & (df["Periode"]==bl_baru)][["Kode_Dokter","Nama_Dokter"]].drop_duplicates()
+                st.dataframe(df_b, hide_index=True, use_container_width=True)
+        with c2:
+            st.write(f"❌ Hilang dari {bl_lama}: {len(hilang)}")
             if hilang:
-                df_hilang = df[df["Kode_Dokter"].isin(hilang) & (df["Periode"]==bulan_lama)][["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]].drop_duplicates()
-                df_hilang["Total_Omzet"] = df_hilang["Total_Omzet"].apply(fmt_titik)
-                st.dataframe(df_hilang, use_container_width=True, hide_index=True)
+                df_h = df[(df["Kode_Dokter"].isin(hilang)) & (df["Periode"]==bl_lama)][["Kode_Dokter","Nama_Dokter"]].drop_duplicates()
+                st.dataframe(df_h, hide_index=True, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab6:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 🔥 Heatmap - FIX Konsistensi Data")
-    st.caption("Sekarang bisa pilih mau lihat Omzet atau Pasien, jadi tidak campur lagi")
-    
-    mode_heat = st.radio("Tampilkan:", ["💰 OMZET (Rp) - Angka Uang", "👥 PASIEN (Orang) - Jumlah Pasien"], horizontal=True, key="heat_mode")
+    st.write("### 🔥 Heatmap - FINAL FIX Konsisten")
+    mode_heat = st.radio("Tampilkan:", ["💰 OMZET (Rp)", "👥 PASIEN"], horizontal=True, key="heat_final")
+    col_val = "Total_Omzet" if "OMZET" in mode_heat else "Total_Pasien"
 
-    if mode_heat == "💰 OMZET (Rp) - Angka Uang":
-        nilai_col = "Total_Omzet"
-        cmap = "Reds"
-        st.info("Menampilkan Total Omzet (CD + SA) per dokter per bulan. Format: 1.000.000 = Rp 1 juta")
-    else:
-        nilai_col = "Total_Pasien"
-        cmap = "Blues"
-        st.info("Menampilkan Total Pasien (orang) per dokter per bulan. Format: 3 = 3 pasien")
-
-    # Pivot dengan kolom yang dipilih - ANTI CAMPUR
-    pivot = df_f.pivot_table(index="Nama_Dokter", columns="Periode", values=nilai_col, aggfunc="sum", fill_value=0)
+    pivot = df_f.pivot_table(index="Nama_Dokter", columns="Periode", values=col_val, aggfunc="sum", fill_value=0)
     pivot = pivot.reindex(columns=[p for p in periode_urut if p in pivot.columns])
-    
-    st.write(f"**Heatmap {nilai_col}: {len(pivot)} Dokter x {len(pivot.columns)} Bulan**")
-    
-    # Format yang konsisten sesuai mode
-    if nilai_col == "Total_Omzet":
+
+    st.write(f"**Heatmap {col_val}: {len(pivot)} Dokter x {len(pivot.columns)} Bulan**")
+
+    if "OMZET" in mode_heat:
+        # OMZET: format 1.000.000
         st.dataframe(
-            pivot.style.background_gradient(cmap=cmap).format(lambda x: fmt_titik(x)), 
+            pivot.style.background_gradient(cmap="Reds").format(fmt_titik),
             use_container_width=True, height=600
         )
     else:
+        # PASIEN: angka saja tanpa kata orang, contoh 3, 6, 11
         st.dataframe(
-            pivot.style.background_gradient(cmap=cmap).format(lambda x: f"{int(x)} orang" if x!=0 else "0"), 
+            pivot.style.background_gradient(cmap="Blues").format(lambda x: f"{int(x)}"),
             use_container_width=True, height=600
         )
-
-    # Penjelasan tambahan untuk kasus kakak
-    st.divider()
-    st.write("**✅ Penjelasan Screenshot Kakak Tadi:**")
-    st.markdown("""
-    - Angka `3, 6, 5, 8, 9, 11` di baris `Assoc Prof...` itu **JUMLAH PASIEN** (bukan omzet), harusnya di mode Pasien
-    - Angka `16.820.000` di baris `BELLA` itu **OMZET** (sudah benar di mode Omzet)
-    - Di V18.2 kemarin kepilih `Total_Omzet` tapi data lama ada yang keisi jumlah pasien, jadi campur
-    - Di V18.3 ini sudah dipisah jadi konsisten
-    """)
-    
-    # Tambahan: Rekap sepi rame tetap omzet
-    st.write(f"**📅 Rekap Bulan Sepi/Rame (Total Omzet Bulan):**")
-    df_heat_bulan = df_month.copy()
-    df_heat_bulan["Periode"] = pd.Categorical(df_heat_bulan["Periode"], categories=periode_urut, ordered=True)
-    df_heat_bulan = df_heat_bulan.sort_values("Periode")
-    df_heat_disp = df_heat_bulan.copy()
-    df_heat_disp["Total_Omzet"] = df_heat_disp["Total_Omzet"].apply(fmt_titik)
-    df_heat_disp["Total_Pasien"] = df_heat_disp["Total_Pasien"].apply(lambda x: f"{int(x)} orang")
-    st.dataframe(df_heat_disp[["Periode","Total_Omzet","Total_Pasien"]].style.background_gradient(subset=["Total_Omzet"], cmap="Reds"), use_container_width=True, hide_index=True)
-
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab7:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 👨‍⚕️ Detail Dokter - FIXED Anti Error")
-    try:
-        df_dokter_list = df_f.groupby("Kode_Dokter", as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"), PIC=("PIC","first"), Total_Omzet=("Total_Omzet","sum")).sort_values("Nama_Dokter")
-        df_dokter_list["Label"] = df_dokter_list["Nama_Dokter"] + " | KODE: " + df_dokter_list["Kode_Dokter"] + " | PIC: " + df_dokter_list["PIC"] + " | Rp " + df_dokter_list["Total_Omzet"].apply(fmt_titik)
-
-        selected_label = st.selectbox("🔎 Cari & Pilih Dokter (ketik nama atau kode)", ["-- Pilih Dokter --"] + df_dokter_list["Label"].tolist(), index=0, key="detail_fix_v182")
-
-        if selected_label!= "-- Pilih Dokter --":
-            try:
-                selected_kode = selected_label.split("KODE: ")[1].split(" |")[0].strip()
-            except:
-                selected_kode = selected_label.split("|")[1].strip() if "|" in selected_label else ""
-            res = df_f[df_f["Kode_Dokter"] == selected_kode].copy()
-            if not res.empty:
-                nama_tampil = res["Nama_Dokter"].iloc[0]
-                st.success(f"✅ Dokter terpilih: **{nama_tampil}** | Kode: **{selected_kode}** | PIC: {res['PIC'].iloc[0]}")
-                hist=res.groupby(["SortDate","Periode"],as_index=False).agg(Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
-                hist["Periode"] = pd.Categorical(hist["Periode"], categories=periode_urut, ordered=True)
-                hist = hist.sort_values("Periode")
-                st.line_chart(hist.set_index("Periode")[["Total"]])
-                hist_disp = hist.copy()
-                hist_disp["Total"] = hist_disp["Total"].apply(fmt_titik)
-                hist_disp["Pasien"] = hist_disp["Pasien"].apply(fmt_titik)
-                st.dataframe(hist_disp[["Periode","Total","Pasien"]], use_container_width=True, hide_index=True)
-                detail_bulan = res.groupby(["Periode","SortDate"], as_index=False).agg(CD=("CD_Omzet","sum"),SA=("SA_Omzet","sum"),Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
-                detail_bulan_disp = detail_bulan.copy()
-                for c in ["CD","SA","Total"]: detail_bulan_disp[c] = detail_bulan_disp[c].apply(fmt_titik)
-                st.dataframe(detail_bulan_disp[["Periode","CD","SA","Total","Pasien"]], use_container_width=True, hide_index=True)
-        else:
-            st.info("👆 Silahkan pilih dokter di atas. Ketik nama atau kode dokter, nanti muncul semua pilihan dengan kode nya biar tidak salah.")
-            preview = df_dokter_list.copy()
-            preview["Total_Omzet"] = preview["Total_Omzet"].apply(fmt_titik)
-            st.dataframe(preview[["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]], use_container_width=True, hide_index=True, height=300)
-    except Exception as e:
-        st.error(f"Detail error: {e}")
-
+    st.write("### 👨‍⚕️ Detail Dokter")
+    df_dokter_list = df_f.groupby("Kode_Dokter", as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"), PIC=("PIC","first"), Total_Omzet=("Total_Omzet","sum")).sort_values("Nama_Dokter")
+    df_dokter_list["Label"] = df_dokter_list["Nama_Dokter"] + " | KODE: " + df_dokter_list["Kode_Dokter"] + " | PIC: " + df_dokter_list["PIC"] + " | Rp " + df_dokter_list["Total_Omzet"].apply(fmt_titik)
+    selected_label = st.selectbox("🔎 Cari & Pilih Dokter (ketik nama atau kode)", ["-- Pilih Dokter --"] + df_dokter_list["Label"].tolist(), index=0, key="detail_v184")
+    if selected_label!= "-- Pilih Dokter --":
+        try: selected_kode = selected_label.split("KODE: ")[1].split(" |")[0].strip()
+        except: selected_kode = ""
+        res = df_f[df_f["Kode_Dokter"] == selected_kode].copy()
+        if not res.empty:
+            nama_tampil = res["Nama_Dokter"].iloc[0]
+            st.success(f"✅ {nama_tampil} | Kode: {selected_kode}")
+            hist=res.groupby(["SortDate","Periode"],as_index=False).agg(Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
+            hist["Periode"] = pd.Categorical(hist["Periode"], categories=periode_urut, ordered=True)
+            hist = hist.sort_values("Periode")
+            st.line_chart(hist.set_index("Periode")[["Total"]])
+            hist_disp = hist.copy()
+            hist_disp["Total"] = hist_disp["Total"].apply(fmt_titik)
+            hist_disp["Pasien"] = hist_disp["Pasien"].apply(fmt_titik)
+            st.dataframe(hist_disp[["Periode","Total","Pasien"]], use_container_width=True, hide_index=True)
+    else:
+        preview = df_dokter_list.copy()
+        preview["Total_Omzet"] = preview["Total_Omzet"].apply(fmt_titik)
+        st.dataframe(preview[["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]], use_container_width=True, hide_index=True, height=300)
     st.markdown('</div>', unsafe_allow_html=True)
