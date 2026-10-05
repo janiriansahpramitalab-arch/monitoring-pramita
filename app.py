@@ -1,6 +1,6 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
 
-st.set_page_config(page_title="Pramita V16.9 Format Titik", layout="wide", page_icon="💰")
+st.set_page_config(page_title="Pramita V17.0 Dropdown Dokter", layout="wide", page_icon="👨‍⚕️")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
@@ -30,7 +30,6 @@ def push_to_github(file_path):
         return (True, "OK") if r_put.status_code in [200,201] else (False, "")
     except: return False, ""
 
-# FORMAT TITIK INDONESIA
 def fmt_titik(x):
     try: return f"{int(x):,}".replace(",", ".")
     except: return str(x)
@@ -127,7 +126,7 @@ st.markdown(f'''
     </div>
     <div>
         <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1>
-        <p style="margin:4px 0 0 0;opacity:0.95">V16.9 Format Titik 1.000.000 | Urut Januari-Desember</p>
+        <p style="margin:4px 0 0 0;opacity:0.95">V17.0 Dropdown Nama+Kode Dokter | Anti Salah Nama</p>
     </div>
 </div>
 ''', unsafe_allow_html=True)
@@ -191,7 +190,6 @@ with tab1:
     df_chart["Periode"] = pd.Categorical(df_chart["Periode"], categories=periode_urut, ordered=True)
     df_chart = df_chart.sort_values("Periode")
     st.line_chart(df_chart.set_index("Periode")[["Total_Omzet"]])
-    # Tampilkan tabel format titik juga
     df_month_disp = df_chart.copy()
     df_month_disp["Total_Omzet"] = df_month_disp["Total_Omzet"].apply(fmt_titik)
     df_month_disp["Total_Pasien"] = df_month_disp["Total_Pasien"].apply(fmt_titik)
@@ -200,10 +198,9 @@ with tab1:
 
 with tab2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write(f"#### 🏆 Ranking - {sort_by} (Format Titik 1.000.000)")
+    st.write(f"#### 🏆 Ranking - {sort_by}")
     df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")).sort_values(sort_by,ascending=False).reset_index(drop=True)
     df_rank.insert(0,"Rank",range(1,len(df_rank)+1))
-    # Buat kolom display dengan titik
     df_display = df_rank.copy()
     for col in ["CD_Omzet","SA_Omzet","Total_Omzet"]:
         df_display[col] = df_display[col].apply(fmt_titik)
@@ -221,7 +218,7 @@ with tab2:
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 📊 Per Cabang (Urut + Titik)")
+    st.write("### 📊 Per Cabang")
     df_cabang=df_f.groupby(["SortDate","Periode"],as_index=False).agg(CD=("CD_Omzet","sum"), SA=("SA_Omzet","sum")).sort_values("SortDate")
     df_cabang["Periode"] = pd.Categorical(df_cabang["Periode"], categories=periode_urut, ordered=True)
     df_cabang = df_cabang.sort_values("Periode")
@@ -234,18 +231,54 @@ with tab3:
 
 with tab4:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    q=st.text_input("🔎 Cari Dokter (nama/kode)")
-    if q:
-        res=df_f[df_f["Nama_Dokter"].str.contains(q,case=False,na=False) | df_f["Kode_Dokter"].str.contains(q,case=False,na=False)].copy()
+    st.write("### 👨‍⚕️ Detail Dokter - Pilih dari Daftar (Anti Salah Nama)")
+
+    # BUAT LIST DOKTER LENGKAP NAMA + KODE + PIC
+    df_dokter_list = df_f.groupby("Kode_Dokter", as_index=False).agg(
+        Nama_Dokter=("Nama_Dokter","first"),
+        PIC=("PIC","first"),
+        Total_Omzet=("Total_Omzet","sum")
+    ).sort_values("Nama_Dokter")
+    df_dokter_list["Label"] = df_dokter_list["Nama_Dokter"] + " | KODE: " + df_dokter_list["Kode_Dokter"] + " | PIC: " + df_dokter_list["PIC"] + " | Rp " + df_dokter_list["Total_Omzet"].apply(fmt_titik)
+
+    # DROPDOWN SEARCHABLE - BISA KETIK NAMA ATAU KODE
+    selected_label = st.selectbox(
+        "🔎 Cari & Pilih Dokter (ketik nama atau kode, akan muncul semua)",
+        options=["-- Pilih Dokter --"] + df_dokter_list["Label"].tolist(),
+        index=0
+    )
+
+    if selected_label!= "-- Pilih Dokter --":
+        # Ambil kode dokter dari label yang dipilih
+        selected_kode = selected_label.split("KODE: ")[1].split(" |")[0]
+        res = df_f[df_f["Kode_Dokter"] == selected_kode].copy()
+
         if not res.empty:
+            nama_tampil = res["Nama_Dokter"].iloc[0]
+            st.success(f"✅ Dokter terpilih: **{nama_tampil}** | Kode: **{selected_kode}** | PIC: {res['PIC'].iloc[0]}")
             hist=res.groupby(["SortDate","Periode"],as_index=False).agg(Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
             hist["Periode"] = pd.Categorical(hist["Periode"], categories=periode_urut, ordered=True)
             hist = hist.sort_values("Periode")
-            st.write(f"#### Grafik {q} - URUT JANUARI->DESEMBER")
+            st.write(f"#### Grafik {nama_tampil} - URUT JANUARI->DESEMBER")
             st.line_chart(hist.set_index("Periode")[["Total"]])
             hist_disp = hist.copy()
             hist_disp["Total"] = hist_disp["Total"].apply(fmt_titik)
             hist_disp["Pasien"] = hist_disp["Pasien"].apply(fmt_titik)
             st.dataframe(hist_disp[["Periode","Total","Pasien"]], use_container_width=True, hide_index=True)
-        else: st.warning("Tidak ditemukan / hidden")
+
+            # Tampilkan detail per periode lengkap
+            st.write("**Detail Lengkap Per Bulan:**")
+            detail_bulan = res.groupby(["Periode","SortDate"], as_index=False).agg(CD=("CD_Omzet","sum"),SA=("SA_Omzet","sum"),Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
+            detail_bulan_disp = detail_bulan.copy()
+            for c in ["CD","SA","Total"]:
+                detail_bulan_disp[c] = detail_bulan_disp[c].apply(fmt_titik)
+            st.dataframe(detail_bulan_disp[["Periode","CD","SA","Total","Pasien"]], use_container_width=True, hide_index=True)
+    else:
+        st.info("👆 Silahkan pilih dokter di atas. Ketik nama atau kode dokter, nanti muncul semua pilihan dengan kode nya biar tidak salah.")
+        # Tampilkan preview semua dokter
+        st.write(f"**Total {len(df_dokter_list)} Dokter Terupload:**")
+        preview = df_dokter_list.copy()
+        preview["Total_Omzet"] = preview["Total_Omzet"].apply(fmt_titik)
+        st.dataframe(preview[["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]], use_container_width=True, hide_index=True, height=300)
+
     st.markdown('</div>', unsafe_allow_html=True)
