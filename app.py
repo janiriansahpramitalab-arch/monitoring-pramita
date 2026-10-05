@@ -1,6 +1,6 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
 
-st.set_page_config(page_title="Pramita V16.8 Anti Error", layout="wide", page_icon="✅")
+st.set_page_config(page_title="Pramita V16.9 Format Titik", layout="wide", page_icon="💰")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
@@ -29,6 +29,14 @@ def push_to_github(file_path):
         r_put = requests.put(url, headers=headers, json=payload)
         return (True, "OK") if r_put.status_code in [200,201] else (False, "")
     except: return False, ""
+
+# FORMAT TITIK INDONESIA
+def fmt_titik(x):
+    try: return f"{int(x):,}".replace(",", ".")
+    except: return str(x)
+def fmt_rp(x):
+    try: return f"Rp {int(x):,}".replace(",", ".")
+    except: return str(x)
 
 BULAN_FULL = {"JANU":"JANUARI","JAN":"JANUARI","FEBR":"FEBRUARI","FEB":"FEBRUARI","MAR":"MARET","MARET":"MARET","APRIL":"APRIL","APR":"APRIL","MEI":"MEI","JUNI":"JUNI","JUN":"JUNI","JULI":"JULI","JUL":"JULI","AGUS":"AGUSTUS","AGU":"AGUSTUS","SEPT":"SEPTEMBER","SEP":"SEPTEMBER","OKTO":"OKTOBER","OKT":"OKTOBER","NOPE":"NOVEMBER","NOV":"NOVEMBER","DESE":"DESEMBER","DES":"DESEMBER"}
 BULAN_ANGKA = {"JANUARI":1,"FEBRUARI":2,"MARET":3,"APRIL":4,"MEI":5,"JUNI":6,"JULI":7,"AGUSTUS":8,"SEPTEMBER":9,"OKTOBER":10,"NOVEMBER":11,"DESEMBER":12}
@@ -119,7 +127,7 @@ st.markdown(f'''
     </div>
     <div>
         <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1>
-        <p style="margin:4px 0 0 0;opacity:0.95">V16.8 Anti Error - Grafik Urut JANUARI-DESEMBER Final</p>
+        <p style="margin:4px 0 0 0;opacity:0.95">V16.9 Format Titik 1.000.000 | Urut Januari-Desember</p>
     </div>
 </div>
 ''', unsafe_allow_html=True)
@@ -165,13 +173,12 @@ df_kpi=df_all.copy()
 df_f=df_all[~df_all["PIC"].str.upper().isin(HIDDEN_PIC)]; df_f=df_f[~df_f["Kode_Dokter"].isin(HIDDEN_KODE)]
 
 total_omzet=df_kpi["Total_Omzet"].sum(); total_pasien=df_kpi["Total_Pasien"].sum(); jml_dokter=df_kpi["Kode_Dokter"].nunique()
-# URUTAN BAKU JADI ACUAN
 periode_urut = df.sort_values("SortDate")["Periode"].unique().tolist()
 df_month=df_all.groupby(["SortDate","Periode"],as_index=False).agg(Total_Omzet=("Total_Omzet","sum"), Total_Pasien=("Total_Pasien","sum")).sort_values("SortDate")
 
 k1,k2,k3,k4=st.columns(4)
-k1.metric("💰 TOTAL OMZET", f"Rp {total_omzet/1_000_000_000:.2f} M")
-k2.metric("👥 TOTAL PASIEN", f"{total_pasien:,}")
+k1.metric("💰 TOTAL OMZET", fmt_rp(total_omzet))
+k2.metric("👥 TOTAL PASIEN", fmt_titik(total_pasien))
 k3.metric("🩺 DOKTER", f"{jml_dokter}", f"Tampil {df_f['Kode_Dokter'].nunique()}")
 k4.metric("📅 PERIODE", f"{len(periode_list_sorted)} Bulan")
 
@@ -180,19 +187,28 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🏆 Ranking", "📈 Analyt
 with tab1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.write("### 📈 Trend Omzet (JANUARI -> DESEMBER URUT)")
-    # FIX PAKSA URUT: buat dataframe dengan Periode sebagai categorical urut
     df_chart = df_month.copy()
     df_chart["Periode"] = pd.Categorical(df_chart["Periode"], categories=periode_urut, ordered=True)
     df_chart = df_chart.sort_values("Periode")
     st.line_chart(df_chart.set_index("Periode")[["Total_Omzet"]])
+    # Tampilkan tabel format titik juga
+    df_month_disp = df_chart.copy()
+    df_month_disp["Total_Omzet"] = df_month_disp["Total_Omzet"].apply(fmt_titik)
+    df_month_disp["Total_Pasien"] = df_month_disp["Total_Pasien"].apply(fmt_titik)
+    st.dataframe(df_month_disp[["Periode","Total_Omzet","Total_Pasien"]], use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write(f"#### 🏆 Ranking - {sort_by} (Top 10 Highlight)")
+    st.write(f"#### 🏆 Ranking - {sort_by} (Format Titik 1.000.000)")
     df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")).sort_values(sort_by,ascending=False).reset_index(drop=True)
     df_rank.insert(0,"Rank",range(1,len(df_rank)+1))
-    df_rank["Medal"]=df_rank["Rank"].apply(lambda x: "🥇 JUARA 1" if x==1 else "🥈 JUARA 2" if x==2 else "🥉 JUARA 3" if x==3 else f"⭐ TOP {x}" if x<=10 else f"#{x}")
+    # Buat kolom display dengan titik
+    df_display = df_rank.copy()
+    for col in ["CD_Omzet","SA_Omzet","Total_Omzet"]:
+        df_display[col] = df_display[col].apply(fmt_titik)
+    df_display["Total_Pasien"] = df_display["Total_Pasien"].apply(fmt_titik)
+    df_display["Medal"]=df_display["Rank"].apply(lambda x: "🥇 JUARA 1" if x==1 else "🥈 JUARA 2" if x==2 else "🥉 JUARA 3" if x==3 else f"⭐ TOP {x}" if x<=10 else f"#{x}")
     def style_top10(row):
         r = row['Rank']
         if r == 1: return ['background-color: #FFD700; color: #78350f; font-weight: 900; font-size: 15px; border-left: 6px solid #b45309;'] * len(row)
@@ -200,16 +216,20 @@ with tab2:
         elif r == 3: return ['background-color: #fdba74; color: #7c2d12; font-weight: 800; font-size: 14px; border-left: 6px solid #9a3412;'] * len(row)
         elif 4 <= r <= 10: return ['background-color: #e0f2fe; color: #0c4a6e; font-weight: 700; font-size: 13px; border-left: 5px solid #0284c7;'] * len(row)
         else: return ['background-color: white; color: #334155; font-size: 12px;'] * len(row)
-    st.dataframe(df_rank.style.apply(style_top10, axis=1), use_container_width=True, hide_index=True, height=700)
+    st.dataframe(df_display.style.apply(style_top10, axis=1), use_container_width=True, hide_index=True, height=700)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 📊 Per Cabang (Urut JANUARI-DESEMBER)")
+    st.write("### 📊 Per Cabang (Urut + Titik)")
     df_cabang=df_f.groupby(["SortDate","Periode"],as_index=False).agg(CD=("CD_Omzet","sum"), SA=("SA_Omzet","sum")).sort_values("SortDate")
     df_cabang["Periode"] = pd.Categorical(df_cabang["Periode"], categories=periode_urut, ordered=True)
     df_cabang = df_cabang.sort_values("Periode")
     st.bar_chart(df_cabang.set_index("Periode")[["CD","SA"]])
+    df_cabang_disp = df_cabang.copy()
+    df_cabang_disp["CD"] = df_cabang_disp["CD"].apply(fmt_titik)
+    df_cabang_disp["SA"] = df_cabang_disp["SA"].apply(fmt_titik)
+    st.dataframe(df_cabang_disp[["Periode","CD","SA"]], use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab4:
@@ -219,12 +239,13 @@ with tab4:
         res=df_f[df_f["Nama_Dokter"].str.contains(q,case=False,na=False) | df_f["Kode_Dokter"].str.contains(q,case=False,na=False)].copy()
         if not res.empty:
             hist=res.groupby(["SortDate","Periode"],as_index=False).agg(Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
-            # FIX PAKSA URUT JANUARI-DESEMBER
             hist["Periode"] = pd.Categorical(hist["Periode"], categories=periode_urut, ordered=True)
             hist = hist.sort_values("Periode")
             st.write(f"#### Grafik {q} - URUT JANUARI->DESEMBER")
             st.line_chart(hist.set_index("Periode")[["Total"]])
-            display_df = hist[["Periode","Total","Pasien"]].sort_values("Periode")
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            hist_disp = hist.copy()
+            hist_disp["Total"] = hist_disp["Total"].apply(fmt_titik)
+            hist_disp["Pasien"] = hist_disp["Pasien"].apply(fmt_titik)
+            st.dataframe(hist_disp[["Periode","Total","Pasien"]], use_container_width=True, hide_index=True)
         else: st.warning("Tidak ditemukan / hidden")
     st.markdown('</div>', unsafe_allow_html=True)
