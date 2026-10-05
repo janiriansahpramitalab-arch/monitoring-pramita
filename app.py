@@ -1,9 +1,32 @@
 import fitz, pandas as pd, os, base64, requests, streamlit as st
 
-st.set_page_config(page_title="Pramita V17.0 Dropdown Dokter", layout="wide", page_icon="👨‍⚕️")
+st.set_page_config(page_title="Pramita V18.0 Super Lengkap", layout="wide", page_icon="🚀")
 DB_FILE = "Database_Monitoring_Pramita.xlsx"
 HIDDEN_PIC = ["YOHANA DEWI RATIH", "NARINDRA NATA KUNTHARA"]
 HIDDEN_KODE = ["2741002000"]
+APP_PASSWORD = st.secrets.get("APP_PASSWORD", "pramita123") # Ganti di Secrets
+
+# ========== LOGIN SYSTEM ==========
+if "authenticated" not in st.session_state: st.session_state.authenticated = False
+if not st.session_state.authenticated:
+    st.markdown("""
+    <div style="text-align:center; padding:60px 20px;">
+        <div style="background:white; border-radius:20px; padding:40px; max-width:400px; margin:auto; box-shadow:0 10px 40px rgba(0,0,0,0.1);">
+            <h1 style="color:#dc2626;">🔐 LOGIN PRAMITA</h1>
+            <p>Monitoring Kinerja Dokter</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    col1,col2,col3 = st.columns([1,2,1])
+    with col2:
+        pwd = st.text_input("Password", type="password")
+        if st.button("MASUK", type="primary", use_container_width=True):
+            if pwd == APP_PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Password salah kak!")
+    st.stop()
 
 st.markdown("""
 <style>
@@ -11,7 +34,7 @@ st.markdown("""
 html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 .main {background-color: #f6f8fb;}
 div[data-testid="metric-container"] {background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eef2f7;}
-.gradient-header {background: linear-gradient(135deg,#b91c1c 0%, #dc2626 50%, #ef4444 100%); padding: 18px 24px; border-radius: 18px; color: white; margin-bottom: 20px; display:flex; align-items:center; gap:18px;}
+.gradient-header {background: linear-gradient(135deg,#b91c1c 0%, #dc2626 50%, #ef4444 100%); padding: 18px 24px; border-radius: 18px; color: white; margin-bottom: 20px; display:flex; align-items:center; gap:18px; justify-content:space-between;}
 .card {background: white; border-radius: 18px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); border: 1px solid #eef2f7; margin-bottom:16px;}
 </style>
 """, unsafe_allow_html=True)
@@ -31,7 +54,9 @@ def push_to_github(file_path):
     except: return False, ""
 
 def fmt_titik(x):
-    try: return f"{int(x):,}".replace(",", ".")
+    try:
+        if pd.isna(x): return "0"
+        return f"{int(x):,}".replace(",", ".")
     except: return str(x)
 def fmt_rp(x):
     try: return f"Rp {int(x):,}".replace(",", ".")
@@ -118,18 +143,27 @@ def parse_pdf(path, label):
             if r: parsed.append(r)
     return pd.DataFrame(parsed)
 
-st.markdown(f'''
-<div class="gradient-header">
-    <div style="background:white; border-radius:12px; padding:6px 14px; display:flex; align-items:center;">
-        <span style="color:#dc2626; font-weight:900; font-size:22px; letter-spacing:1px;">PRAMITA</span>
-        <span style="color:#dc2626; font-style:italic; margin-left:8px; font-weight:600;">Lab</span>
+# HEADER
+c_head1, c_head2 = st.columns([6,1])
+with c_head1:
+    st.markdown(f'''
+    <div class="gradient-header">
+        <div style="display:flex; align-items:center; gap:18px;">
+            <div style="background:white; border-radius:12px; padding:6px 14px; display:flex; align-items:center;">
+                <span style="color:#dc2626; font-weight:900; font-size:22px; letter-spacing:1px;">PRAMITA</span>
+                <span style="color:#dc2626; font-style:italic; margin-left:8px; font-weight:600;">Lab</span>
+            </div>
+            <div>
+                <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER V18.0</h1>
+                <p style="margin:4px 0 0 0;opacity:0.95">Super Lengkap - Login + Churn + Banding Bulan + PIC + Heatmap</p>
+            </div>
+        </div>
     </div>
-    <div>
-        <h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1>
-        <p style="margin:4px 0 0 0;opacity:0.95">V17.0 Dropdown Nama+Kode Dokter | Anti Salah Nama</p>
-    </div>
-</div>
-''', unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
+with c_head2:
+    if st.button("🚪 Logout"):
+        st.session_state.authenticated=False
+        st.rerun()
 
 with st.sidebar:
     st.markdown("### 📂 Upload Data")
@@ -181,7 +215,7 @@ k2.metric("👥 TOTAL PASIEN", fmt_titik(total_pasien))
 k3.metric("🩺 DOKTER", f"{jml_dokter}", f"Tampil {df_f['Kode_Dokter'].nunique()}")
 k4.metric("📅 PERIODE", f"{len(periode_list_sorted)} Bulan")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🏆 Ranking", "📈 Analytics", "👨‍⚕️ Detail"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 Dashboard", "🏆 Ranking", "🔄 Banding Bulan", "👥 Analisa PIC", "🆕 Baru/Hilang", "🔥 Heatmap", "👨‍⚕️ Detail"])
 
 with tab1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -198,7 +232,7 @@ with tab1:
 
 with tab2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write(f"#### 🏆 Ranking - {sort_by}")
+    st.write(f"#### 🏆 Ranking - {sort_by} (Format Titik)")
     df_rank=df_f.groupby("Kode_Dokter",as_index=False).agg(Nama_Dokter=("Nama_Dokter","first"),PIC=("PIC","first"),CD_Omzet=("CD_Omzet","sum"),SA_Omzet=("SA_Omzet","sum"),Total_Omzet=("Total_Omzet","sum"),Total_Pasien=("Total_Pasien","sum")).sort_values(sort_by,ascending=False).reset_index(drop=True)
     df_rank.insert(0,"Rank",range(1,len(df_rank)+1))
     df_display = df_rank.copy()
@@ -218,22 +252,157 @@ with tab2:
 
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 📊 Per Cabang")
-    df_cabang=df_f.groupby(["SortDate","Periode"],as_index=False).agg(CD=("CD_Omzet","sum"), SA=("SA_Omzet","sum")).sort_values("SortDate")
-    df_cabang["Periode"] = pd.Categorical(df_cabang["Periode"], categories=periode_urut, ordered=True)
-    df_cabang = df_cabang.sort_values("Periode")
-    st.bar_chart(df_cabang.set_index("Periode")[["CD","SA"]])
-    df_cabang_disp = df_cabang.copy()
-    df_cabang_disp["CD"] = df_cabang_disp["CD"].apply(fmt_titik)
-    df_cabang_disp["SA"] = df_cabang_disp["SA"].apply(fmt_titik)
-    st.dataframe(df_cabang_disp[["Periode","CD","SA"]], use_container_width=True, hide_index=True)
+    st.write("### 🔄 Perbandingan Bulan - SEPTEMBER vs AGUSTUS")
+    st.caption("Pilih 2 bulan untuk lihat naik/turun % per dokter. Support all bulan.")
+    c1,c2 = st.columns(2)
+    with c1:
+        bulan1 = st.selectbox("Bulan 1 (Bulan Lama)", periode_urut, index=len(periode_urut)-2 if len(periode_urut)>=2 else 0)
+    with c2:
+        bulan2 = st.selectbox("Bulan 2 (Bulan Baru)", periode_urut, index=len(periode_urut)-1 if len(periode_urut)>=1 else 0)
+
+    if bulan1 and bulan2:
+        df_b1 = df_f[df_f["Periode"]==bulan1].groupby("Kode_Dokter", as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet_1=("Total_Omzet","sum"), Pasien_1=("Total_Pasien","sum"))
+        df_b2 = df_f[df_f["Periode"]==bulan2].groupby("Kode_Dokter", as_index=False).agg(Omzet_2=("Total_Omzet","sum"), Pasien_2=("Total_Pasien","sum"))
+        df_comp = pd.merge(df_b1, df_b2, on="Kode_Dokter", how="outer").fillna(0)
+        df_comp["Selisih_Omzet"] = df_comp["Omzet_2"] - df_comp["Omzet_1"]
+        df_comp["Persen"] = df_comp.apply(lambda r: (r["Selisih_Omzet"]/r["Omzet_1"]*100) if r["Omzet_1"]!=0 else (100 if r["Omzet_2"]>0 else 0), axis=1)
+        df_comp["Status"] = df_comp["Persen"].apply(lambda x: "📈 NAIK" if x>10 else "📉 TURUN" if x<-10 else "➖ STABIL")
+        df_comp = df_comp.sort_values("Persen", ascending=False)
+
+        # Display dengan format titik
+        df_comp_disp = df_comp.copy()
+        for col in ["Omzet_1","Omzet_2","Selisih_Omzet"]:
+            df_comp_disp[col] = df_comp_disp[col].apply(fmt_titik)
+        df_comp_disp["Persen"] = df_comp_disp["Persen"].apply(lambda x: f"{x:.1f}%")
+
+        st.write(f"**{bulan2} vs {bulan1}**")
+        st.dataframe(df_comp_disp[["Nama","Kode_Dokter","Omzet_1","Omzet_2","Selisih_Omzet","Persen","Status"]], use_container_width=True, hide_index=True, height=500)
+
+        # Top Naik dan Turun
+        cc1,cc2 = st.columns(2)
+        with cc1:
+            st.write("**🚀 Top 5 NAIK Tertinggi**")
+            st.dataframe(df_comp_disp.head(5)[["Nama","Persen","Status"]], hide_index=True, use_container_width=True)
+        with cc2:
+            st.write("**📉 Top 5 TURUN Terdalam**")
+            st.dataframe(df_comp_disp.tail(5)[["Nama","Persen","Status"]], hide_index=True, use_container_width=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab4:
     st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.write("### 👥 Analisa PIC - Siapa PIC Paling Jago?")
+    df_pic = df_f.groupby("PIC", as_index=False).agg(
+        Jml_Dokter=("Kode_Dokter","nunique"),
+        Total_Omzet=("Total_Omzet","sum"),
+        Total_Pasien=("Total_Pasien","sum"),
+        CD_Omzet=("CD_Omzet","sum"),
+        SA_Omzet=("SA_Omzet","sum")
+    ).sort_values("Total_Omzet", ascending=False)
+    df_pic["Avg_per_Dokter"] = df_pic["Total_Omzet"] / df_pic["Jml_Dokter"]
+
+    st.bar_chart(df_pic.set_index("PIC")[["Total_Omzet"]])
+
+    df_pic_disp = df_pic.copy()
+    for col in ["Total_Omzet","CD_Omzet","SA_Omzet","Avg_per_Dokter"]:
+        df_pic_disp[col] = df_pic_disp[col].apply(fmt_titik)
+    df_pic_disp["Total_Pasien"] = df_pic_disp["Total_Pasien"].apply(fmt_titik)
+    st.dataframe(df_pic_disp, use_container_width=True, hide_index=True)
+
+    # Detail per PIC
+    sel_pic_detail = st.selectbox("Pilih PIC untuk lihat dokter nya", df_pic["PIC"].tolist())
+    if sel_pic_detail:
+        df_pic_dok = df_f[df_f["PIC"]==sel_pic_detail].groupby("Kode_Dokter", as_index=False).agg(Nama=("Nama_Dokter","first"), Omzet=("Total_Omzet","sum"), Pasien=("Total_Pasien","sum")).sort_values("Omzet", ascending=False)
+        df_pic_dok["Omzet"] = df_pic_dok["Omzet"].apply(fmt_titik)
+        st.write(f"**Dokter PIC {sel_pic_detail}:**")
+        st.dataframe(df_pic_dok, use_container_width=True, hide_index=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tab5:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.write("### 🆕 Dokter Baru / Hilang (Churn Detection)")
+    if len(periode_urut) >= 2:
+        bulan_lama = periode_urut[-2]
+        bulan_baru = periode_urut[-1]
+        st.info(f"Membandingkan **{bulan_lama}** (lama) vs **{bulan_baru}** (baru)")
+
+        dokter_lama = set(df[df["Periode"]==bulan_lama]["Kode_Dokter"].unique())
+        dokter_baru = set(df[df["Periode"]==bulan_baru]["Kode_Dokter"].unique())
+
+        baru = dokter_baru - dokter_lama
+        hilang = dokter_lama - dokter_baru
+        tetap = dokter_baru & dokter_lama
+
+        k1,k2,k3 = st.columns(3)
+        k1.metric("✅ Tetap Aktif", f"{len(tetap)} dokter")
+        k2.metric("🆕 Dokter Baru", f"{len(baru)} dokter", delta=f"{len(baru)}")
+        k3.metric("❌ Hilang", f"{len(hilang)} dokter", delta=f"-{len(hilang)}", delta_color="inverse")
+
+        colA,colB = st.columns(2)
+        with colA:
+            st.write(f"**🆕 Dokter Baru di {bulan_baru}:**")
+            if baru:
+                df_baru = df[df["Kode_Dokter"].isin(baru) & (df["Periode"]==bulan_baru)][["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]].drop_duplicates()
+                df_baru["Total_Omzet"] = df_baru["Total_Omzet"].apply(fmt_titik)
+                st.dataframe(df_baru, use_container_width=True, hide_index=True)
+            else:
+                st.success("Tidak ada dokter baru")
+
+        with colB:
+            st.write(f"**❌ Dokter Hilang dari {bulan_lama}:**")
+            if hilang:
+                df_hilang = df[df["Kode_Dokter"].isin(hilang) & (df["Periode"]==bulan_lama)][["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]].drop_duplicates()
+                df_hilang["Total_Omzet"] = df_hilang["Total_Omzet"].apply(fmt_titik)
+                st.dataframe(df_hilang, use_container_width=True, hide_index=True)
+            else:
+                st.success("Tidak ada dokter hilang")
+
+        # All bulan churn
+        st.divider()
+        st.write("**📊 Rekap Churn Semua Bulan:**")
+        rekap=[]
+        for i in range(1, len(periode_urut)):
+            bl_l = periode_urut[i-1]; bl_b = periode_urut[i]
+            dl = set(df[df["Periode"]==bl_l]["Kode_Dokter"].unique())
+            db = set(df[df["Periode"]==bl_b]["Kode_Dokter"].unique())
+            rekap.append({"Periode": f"{bl_l} -> {bl_b}", "Baru": len(db-dl), "Hilang": len(dl-db), "Tetap": len(db&dl)})
+        st.dataframe(pd.DataFrame(rekap), use_container_width=True, hide_index=True)
+
+    else:
+        st.warning("Butuh minimal 2 bulan untuk deteksi churn kak. Upload lagi bulan lainnya ya.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tab6:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.write("### 🔥 Heatmap Pasien - Bulan Sepi / Rame")
+    st.caption("Warna merah = rame (omzet tinggi), biru = sepi. Cek dokter yang sepi rame nya.")
+
+    # Pivot dokter vs bulan
+    pivot = df_f.pivot_table(index="Nama_Dokter", columns="Periode", values="Total_Omzet", aggfunc="sum", fill_value=0)
+    # Urutkan kolom sesuai periode_urut
+    pivot = pivot.reindex(columns=[p for p in periode_urut if p in pivot.columns])
+
+    st.write(f"**Heatmap Omzet: {len(pivot)} Dokter x {len(pivot.columns)} Bulan**")
+    st.dataframe(pivot.style.background_gradient(cmap="RdYlGn_r").format(lambda x: fmt_titik(x)), use_container_width=True, height=600)
+
+    # Heatmap total per bulan (sepi rame bulan)
+    st.divider()
+    st.write("**📅 Bulan Sepi vs Rame (Total Omzet):**")
+    df_heat_bulan = df_month.copy()
+    df_heat_bulan["Periode"] = pd.Categorical(df_heat_bulan["Periode"], categories=periode_urut, ordered=True)
+    df_heat_bulan = df_heat_bulan.sort_values("Periode")
+    df_heat_bulan_disp = df_heat_bulan.copy()
+    df_heat_bulan_disp["Total_Omzet"] = df_heat_bulan_disp["Total_Omzet"].apply(fmt_titik)
+    st.dataframe(df_heat_bulan_disp.style.background_gradient(subset=["Total_Omzet"], cmap="Reds"), use_container_width=True, hide_index=True)
+    st.bar_chart(df_heat_bulan.set_index("Periode")[["Total_Omzet"]])
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with tab7:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.write("### 👨‍⚕️ Detail Dokter - Pilih dari Daftar (Anti Salah Nama)")
 
-    # BUAT LIST DOKTER LENGKAP NAMA + KODE + PIC
     df_dokter_list = df_f.groupby("Kode_Dokter", as_index=False).agg(
         Nama_Dokter=("Nama_Dokter","first"),
         PIC=("PIC","first"),
@@ -241,15 +410,14 @@ with tab4:
     ).sort_values("Nama_Dokter")
     df_dokter_list["Label"] = df_dokter_list["Nama_Dokter"] + " | KODE: " + df_dokter_list["Kode_Dokter"] + " | PIC: " + df_dokter_list["PIC"] + " | Rp " + df_dokter_list["Total_Omzet"].apply(fmt_titik)
 
-    # DROPDOWN SEARCHABLE - BISA KETIK NAMA ATAU KODE
     selected_label = st.selectbox(
         "🔎 Cari & Pilih Dokter (ketik nama atau kode, akan muncul semua)",
         options=["-- Pilih Dokter --"] + df_dokter_list["Label"].tolist(),
-        index=0
+        index=0,
+        key="dokter_detail_v18"
     )
 
     if selected_label!= "-- Pilih Dokter --":
-        # Ambil kode dokter dari label yang dipilih
         selected_kode = selected_label.split("KODE: ")[1].split(" |")[0]
         res = df_f[df_f["Kode_Dokter"] == selected_kode].copy()
 
@@ -259,14 +427,12 @@ with tab4:
             hist=res.groupby(["SortDate","Periode"],as_index=False).agg(Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
             hist["Periode"] = pd.Categorical(hist["Periode"], categories=periode_urut, ordered=True)
             hist = hist.sort_values("Periode")
-            st.write(f"#### Grafik {nama_tampil} - URUT JANUARI->DESEMBER")
             st.line_chart(hist.set_index("Periode")[["Total"]])
             hist_disp = hist.copy()
             hist_disp["Total"] = hist_disp["Total"].apply(fmt_titik)
             hist_disp["Pasien"] = hist_disp["Pasien"].apply(fmt_titik)
             st.dataframe(hist_disp[["Periode","Total","Pasien"]], use_container_width=True, hide_index=True)
 
-            # Tampilkan detail per periode lengkap
             st.write("**Detail Lengkap Per Bulan:**")
             detail_bulan = res.groupby(["Periode","SortDate"], as_index=False).agg(CD=("CD_Omzet","sum"),SA=("SA_Omzet","sum"),Total=("Total_Omzet","sum"),Pasien=("Total_Pasien","sum")).sort_values("SortDate")
             detail_bulan_disp = detail_bulan.copy()
@@ -274,9 +440,7 @@ with tab4:
                 detail_bulan_disp[c] = detail_bulan_disp[c].apply(fmt_titik)
             st.dataframe(detail_bulan_disp[["Periode","CD","SA","Total","Pasien"]], use_container_width=True, hide_index=True)
     else:
-        st.info("👆 Silahkan pilih dokter di atas. Ketik nama atau kode dokter, nanti muncul semua pilihan dengan kode nya biar tidak salah.")
-        # Tampilkan preview semua dokter
-        st.write(f"**Total {len(df_dokter_list)} Dokter Terupload:**")
+        st.info("👆 Pilih dokter di atas. Ketik nama atau kode dokter.")
         preview = df_dokter_list.copy()
         preview["Total_Omzet"] = preview["Total_Omzet"].apply(fmt_titik)
         st.dataframe(preview[["Kode_Dokter","Nama_Dokter","PIC","Total_Omzet"]], use_container_width=True, hide_index=True, height=300)
