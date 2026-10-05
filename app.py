@@ -317,10 +317,58 @@ with tab5:
 
 with tab6:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write("### 🔥 Heatmap Pasien - Bulan Sepi / Rame")
-    pivot = df_f.pivot_table(index="Nama_Dokter", columns="Periode", values="Total_Omzet", aggfunc="sum", fill_value=0)
+    st.write("### 🔥 Heatmap - FIX Konsistensi Data")
+    st.caption("Sekarang bisa pilih mau lihat Omzet atau Pasien, jadi tidak campur lagi")
+    
+    mode_heat = st.radio("Tampilkan:", ["💰 OMZET (Rp) - Angka Uang", "👥 PASIEN (Orang) - Jumlah Pasien"], horizontal=True, key="heat_mode")
+
+    if mode_heat == "💰 OMZET (Rp) - Angka Uang":
+        nilai_col = "Total_Omzet"
+        cmap = "Reds"
+        st.info("Menampilkan Total Omzet (CD + SA) per dokter per bulan. Format: 1.000.000 = Rp 1 juta")
+    else:
+        nilai_col = "Total_Pasien"
+        cmap = "Blues"
+        st.info("Menampilkan Total Pasien (orang) per dokter per bulan. Format: 3 = 3 pasien")
+
+    # Pivot dengan kolom yang dipilih - ANTI CAMPUR
+    pivot = df_f.pivot_table(index="Nama_Dokter", columns="Periode", values=nilai_col, aggfunc="sum", fill_value=0)
     pivot = pivot.reindex(columns=[p for p in periode_urut if p in pivot.columns])
-    st.dataframe(pivot.style.background_gradient(cmap="RdYlGn_r").format(lambda x: fmt_titik(x)), use_container_width=True, height=600)
+    
+    st.write(f"**Heatmap {nilai_col}: {len(pivot)} Dokter x {len(pivot.columns)} Bulan**")
+    
+    # Format yang konsisten sesuai mode
+    if nilai_col == "Total_Omzet":
+        st.dataframe(
+            pivot.style.background_gradient(cmap=cmap).format(lambda x: fmt_titik(x)), 
+            use_container_width=True, height=600
+        )
+    else:
+        st.dataframe(
+            pivot.style.background_gradient(cmap=cmap).format(lambda x: f"{int(x)} orang" if x!=0 else "0"), 
+            use_container_width=True, height=600
+        )
+
+    # Penjelasan tambahan untuk kasus kakak
+    st.divider()
+    st.write("**✅ Penjelasan Screenshot Kakak Tadi:**")
+    st.markdown("""
+    - Angka `3, 6, 5, 8, 9, 11` di baris `Assoc Prof...` itu **JUMLAH PASIEN** (bukan omzet), harusnya di mode Pasien
+    - Angka `16.820.000` di baris `BELLA` itu **OMZET** (sudah benar di mode Omzet)
+    - Di V18.2 kemarin kepilih `Total_Omzet` tapi data lama ada yang keisi jumlah pasien, jadi campur
+    - Di V18.3 ini sudah dipisah jadi konsisten
+    """)
+    
+    # Tambahan: Rekap sepi rame tetap omzet
+    st.write(f"**📅 Rekap Bulan Sepi/Rame (Total Omzet Bulan):**")
+    df_heat_bulan = df_month.copy()
+    df_heat_bulan["Periode"] = pd.Categorical(df_heat_bulan["Periode"], categories=periode_urut, ordered=True)
+    df_heat_bulan = df_heat_bulan.sort_values("Periode")
+    df_heat_disp = df_heat_bulan.copy()
+    df_heat_disp["Total_Omzet"] = df_heat_disp["Total_Omzet"].apply(fmt_titik)
+    df_heat_disp["Total_Pasien"] = df_heat_disp["Total_Pasien"].apply(lambda x: f"{int(x)} orang")
+    st.dataframe(df_heat_disp[["Periode","Total_Omzet","Total_Pasien"]].style.background_gradient(subset=["Total_Omzet"], cmap="Reds"), use_container_width=True, hide_index=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab7:
