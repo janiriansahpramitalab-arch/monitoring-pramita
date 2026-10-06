@@ -98,70 +98,147 @@ def parse_date(s):
     try: n=normalize_periode(s); return pd.Timestamp(year=int(n.split("-")[1]), month=BULAN_ANGKA.get(n.split("-")[0],1), day=1)
     except: return pd.Timestamp(2026,1,1)
 
-# ===== PARSER FINAL REAL =====
+# ===== PARSER BARU - TAHAN FORMAT ACAK 1-BARIS =====
 def parse_pdf_real_all(pdf_path):
+    """
+    Parser baru: tahan terhadap PDF format acak/1-baris-panjang.
+    Strategi:
+      1. Ambil seluruh text PDF.
+      2. Cari periode (Tanggal xx-xx-xxxx s/d yy-yy-yyyy).
+      3. Loop per halaman:
+         - Deteksi PIC (nama huruf kapital di atas tabel)
+         - Cari semua kode dokter (regex 274\\d{7})
+         - Pecah text jadi blok per dokter: dari kode_i sampai kode_{i+1}
+         - Dari tiap blok, ambil angka-angka setelah kode
+         - Petakan ke kolom CD_Omzet, CD_Pasien, SA_Omzet, SA_Pasien, Total_Omzet, Total_Pasien
+    """
     doc = fitz.open(pdf_path)
+
+    # === 1. Deteksi periode ===
     full_text = ""
-    for page in doc: full_text += page.get_text("text") + "\n"
-    m = re.search(r"(\d{2}-\d{2}-\d{4})\s*s/d\s*(\d{2}-\d{2}-\d{4})", full_text)
+    for page in doc:
+        full_text += page.get_text("text") + "\n"
+    m = re.search(r"(\d{2}-\d{2}-\d{4})\s*(?:s/?d/?)\s*(\d{2}-\d{2}-\d{4})", full_text)
     if m:
         tgl_akhir = m.group(2)
         bln = int(tgl_akhir.split("-")[1]); thn = tgl_akhir.split("-")[2]
-        bulan_nama = ["","JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"][bln]
+        bulan_nama = ["","JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI",
+                      "JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"][bln]
         periode = f"{bulan_nama}-{thn}"
     else:
         periode = normalize_periode(os.path.basename(pdf_path))
-        if "-" not in periode: periode = "SEPTEMBER-2026"
+        if "-" not in periode:
+            periode = "SEPTEMBER-2026"
+
     data = []
+
+    # === 2. Loop per halaman ===
     for page in doc:
         text = page.get_text("text")
-        lines = text.split("\n")
+
+        # --- 2a. Deteksi PIC ---
         pic = "UNKNOWN"
-        for l in lines:
-            if l.strip().isupper() and 3 < len(l.strip()) < 30 and "PENGAMBILAN" not in l and "TOTAL" not in l and "Tanggal" not in l:
-                if len(l.strip().split())<=4:
-                    pic = l.strip()
-        for i, line in enumerate(lines):
-            if "274" not in line: continue
-            kode_match = re.search(r"(274\d{7})", line)
-            if not kode_match: continue
-            kode = kode_match.group(1)
-            combined = line + " " + (lines[i+1] if i+1 < len(lines) else "")
-            all_nums = re.findall(r"\d{1,3}(?:\.\d{3})+|\b\d+\b", combined)
-            clean=[]
+        for line in text.split("\n"):
+            s = line.strip()
+            if (s.isupper() and 4 < len(s) < 40
+                and "PENGAMBILAN" not in s
+                and "TANGGAL" not in s
+                and "TOTAL" not in s
+                and "No" not in s
+                and "Kode" not in s
+                and "Dokter" not in s
+                and not s.startswith("Tanggal")):
+                if len(s.split()) >= 1:
+                    pic = s
+                    break
+
+        # --- 2b. Cari semua kode dokter ---
+        kode_matches = list(re.finditer(r"274\d{7}", text))
+        if not kode_matches:
+            continue
+
+        # --- 2c. Pecah text jadi blok per dokter ---
+        for idx, km in enumerate(kode_matches):
+            kode = km.group(0)
+            start = km.start()
+            end = kode_matches[idx+1].start() if idx+1 < len(kode_matches) else len(text)
+            blok = text[start:end]
+
+            # --- 2d. Ambil nama dokter ---
+            after_kode = blok[len(kode):]
+            m_num = re.search(r"\d", after_kode)
+            if m_num:
+                nama_raw = after_kode[:m_num.start()]
+            else:
+                nama_raw = after_kode
+            nama = re.sub(r"\s+", " ", nama_raw).strip()
+            nama = re.sub(r"^[\.\-\s]+", "", nama)
+            nama = nama[:80]
+            if len(nama) < 3:
+                nama = f"dr. {kode}"
+
+            # --- 2e. Ambil semua angka setelah kode ---
+            all_nums = re.findall(r"\d{1,3}(?:\.\d{3})+|\b\d+\b", blok)
+            clean = []
             for n in all_nums:
-                if n==kode: continue
-                if "." in n: clean.append(int(n.replace(".","")))
+                if n == kode:
+                    continue
+                if "." in n:
+                    try: clean.append(int(n.replace(".", "")))
+                    except: pass
                 else:
                     try: clean.append(int(n))
                     except: pass
-            if len(clean) < 13: continue
-            try:
-                Bln = clean[0]
-                CD_Total = clean[1]
-                CD_Psn_cabang = clean[4]
-                SA_Total = clean[5]
-                SA_Psn_cabang = clean[8]
-                TOTAL_Total = clean[9]
-                TOTAL_Pasien_total = clean[11]
 
-                nama = line.split(kode)[-1]
-                nama = re.sub(r"\s+\d+\s+[\d.]+\s*$", "", nama).strip()[:80]
-                nama = re.sub(r"\s{2,}", " ", nama)
-                if len(nama)<3: nama = f"dr. {kode}"
+            # --- 2f. Petakan angka ke kolom ---
+            # Struktur: Bln, CD_Total, CD_Reward, CD_Round, CD_Pan,
+            #           SA_Total, SA_Reward, SA_Round, SA_Pan,
+            #           TOTAL, reward, pasien, roundreward
+            if len(clean) < 13:
+                continue
+
+            try:
+                CD_Omzet  = clean[1]
+                CD_Pasien = clean[4]
+                SA_Omzet  = clean[5]
+                SA_Pasien = clean[8]
+                Total_Omzet  = clean[9]
+                Total_Pasien = clean[11]
+
+                # Sanity check: Total = CD + SA
+                if abs(Total_Omzet - (CD_Omzet + SA_Omzet)) > max(100, 0.01 * Total_Omzet):
+                    Total_Omzet = CD_Omzet + SA_Omzet
+                if Total_Pasien < (CD_Pasien + SA_Pasien):
+                    Total_Pasien = CD_Pasien + SA_Pasien
 
                 data.append({
-                    "Kode_Dokter": kode, "Nama_Dokter": nama, "PIC": pic, "Periode": periode,
-                    "CD_Omzet": CD_Total, "CD_Pasien": CD_Psn_cabang,
-                    "SA_Omzet": SA_Total, "SA_Pasien": SA_Psn_cabang,
-                    "Total_Omzet": TOTAL_Total, "Total_Pasien": TOTAL_Pasien_total
+                    "Kode_Dokter": kode,
+                    "Nama_Dokter": nama,
+                    "PIC": pic,
+                    "Periode": periode,
+                    "CD_Omzet": CD_Omzet,
+                    "CD_Pasien": CD_Pasien,
+                    "SA_Omzet": SA_Omzet,
+                    "SA_Pasien": SA_Pasien,
+                    "Total_Omzet": Total_Omzet,
+                    "Total_Pasien": Total_Pasien,
                 })
-            except: continue
+            except Exception:
+                continue
+
     doc.close()
+
     df = pd.DataFrame(data)
     if not df.empty:
-        df = df.groupby(["Kode_Dokter","Periode"], as_index=False).agg({
-            "Nama_Dokter":"first","PIC":"first","CD_Omzet":"max","CD_Pasien":"max","SA_Omzet":"max","SA_Pasien":"max","Total_Omzet":"max","Total_Pasien":"max"
+        df = df.groupby(["Kode_Dokter", "Periode"], as_index=False).agg({
+            "Nama_Dokter": "first",
+            "PIC": "first",
+            "CD_Omzet": "max",
+            "CD_Pasien": "max",
+            "SA_Omzet": "max",
+            "SA_Pasien": "max",
+            "Total_Omzet": "max",
+            "Total_Pasien": "max",
         })
     return df, periode
 
@@ -172,27 +249,24 @@ with c_head1:
 with c_head2:
     if st.button("🚪 Logout"): st.session_state.authenticated=False; st.rerun()
 
-# ============ AUTO-PULL DARI GITHUB SAAT APP DIBUKA ============
-# Kalau file lokal tidak ada, coba tarik dari GitHub dulu
+# ============ AUTO-PULL DARI GITHUB ============
 if not os.path.exists(DB_FILE):
     with st.spinner("🔄 Mengambil database terbaru dari GitHub..."):
         ok, msg = pull_from_github(DB_FILE)
     if ok:
         st.success("✅ Database berhasil dipulihkan dari GitHub!")
     else:
-        # Hanya tampilkan kalau memang tidak ada di GitHub (bukan error token)
         if "404" in msg or "belum ada" in msg:
             st.info("📂 Belum ada database. Silakan upload PDF di sidebar kiri ya kak.")
         else:
             st.warning(f"⚠️ Gagal ambil dari GitHub: {msg}")
 
-# ============ JIKA TETAP TIDAK ADA FILE -> MODE UPLOAD ============
+# ============ MODE UPLOAD (kalau DB kosong) ============
 if not os.path.exists(DB_FILE):
     with st.sidebar:
         st.markdown("### 📂 Upload PDF Real Semua Data")
         up = st.file_uploader("Pilih PDF", type=["pdf"], accept_multiple_files=True)
         if up and st.button("🔥 REBUILD SEMUA DATA REAL", type="primary", use_container_width=True):
-            # PULL dulu supaya data lama tetap ada
             pull_from_github(DB_FILE)
             all_df=[]
             for f in up:
@@ -227,7 +301,6 @@ with st.sidebar:
     uploaded_pdfs = st.file_uploader("Upload PDF Semua Bulan (bisa banyak)", type=["pdf"], accept_multiple_files=True, key="upload_all")
     if uploaded_pdfs:
         if st.button("🔥 REBUILD SEMUA DATA REAL", type="primary", use_container_width=True, key="rebuild_all"):
-            # PULL dulu supaya data periode lain tidak hilang
             pull_from_github(DB_FILE)
             all_dfs=[]
             for pdf_file in uploaded_pdfs:
