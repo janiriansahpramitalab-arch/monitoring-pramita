@@ -28,20 +28,59 @@ div[data-testid="metric-container"] {background: white; border-radius: 16px; pad
 </style>
 """, unsafe_allow_html=True)
 
-def push_to_github(file_path):
-    try:
-        token = st.secrets.get("GITHUB_TOKEN"); repo = st.secrets.get("GITHUB_REPO"); branch = st.secrets.get("GITHUB_BRANCH", "main")
-        if not token or not repo: return False, ""
-        with open(file_path, "rb") as f: content = base64.b64encode(f.read()).decode()
-        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-        r_get = requests.get(url, headers=headers, params={"ref": branch}); sha = r_get.json().get("sha") if r_get.status_code == 200 else None
-        payload = {"message": f"backup {file_path}", "content": content, "branch": branch}
-        if sha: payload["sha"] = sha
-        r_put = requests.put(url, headers=headers, json=payload)
-        return (True, "OK") if r_put.status_code in [200,201] else (False, "")
-    except: return False, ""
+# ============ FUNGSI GITHUB (PULL + PUSH) ============
+def _gh_cfg():
+    return (
+        st.secrets.get("GITHUB_TOKEN"),
+        st.secrets.get("GITHUB_REPO"),
+        st.secrets.get("GITHUB_BRANCH", "main"),
+    )
 
+def pull_from_github(file_path):
+    """Download file dari GitHub ke filesystem lokal. Return (ok, msg)."""
+    try:
+        token, repo, branch = _gh_cfg()
+        if not token or not repo:
+            return False, "GITHUB_TOKEN / GITHUB_REPO belum di-set di secrets"
+        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+        headers = {"Authorization": f"token {token}",
+                   "Accept": "application/vnd.github.v3+json"}
+        r = requests.get(url, headers=headers, params={"ref": branch}, timeout=30)
+        if r.status_code == 200:
+            content = base64.b64decode(r.json()["content"])
+            with open(file_path, "wb") as f:
+                f.write(content)
+            return True, "OK"
+        if r.status_code == 404:
+            return False, "File belum ada di GitHub (pertama kali upload)"
+        return False, f"HTTP {r.status_code}: {r.text[:200]}"
+    except Exception as e:
+        return False, str(e)
+
+def push_to_github(file_path):
+    """Upload file ke GitHub. Return (ok, msg)."""
+    try:
+        token, repo, branch = _gh_cfg()
+        if not token or not repo:
+            return False, "GITHUB_TOKEN / GITHUB_REPO belum di-set di secrets"
+        with open(file_path, "rb") as f:
+            content = base64.b64encode(f.read()).decode()
+        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+        headers = {"Authorization": f"token {token}",
+                   "Accept": "application/vnd.github.v3+json"}
+        r_get = requests.get(url, headers=headers, params={"ref": branch}, timeout=30)
+        sha = r_get.json().get("sha") if r_get.status_code == 200 else None
+        payload = {"message": f"backup {file_path}", "content": content, "branch": branch}
+        if sha:
+            payload["sha"] = sha
+        r_put = requests.put(url, headers=headers, json=payload, timeout=60)
+        if r_put.status_code in [200, 201]:
+            return True, "OK"
+        return False, f"HTTP {r_put.status_code}: {r_put.text[:200]}"
+    except Exception as e:
+        return False, str(e)
+
+# ============ FORMATTER ============
 def fmt_titik(x):
     try:
         if pd.isna(x): return "0"
@@ -59,7 +98,7 @@ def parse_date(s):
     try: n=normalize_periode(s); return pd.Timestamp(year=int(n.split("-")[1]), month=BULAN_ANGKA.get(n.split("-")[0],1), day=1)
     except: return pd.Timestamp(2026,1,1)
 
-# ===== PARSER FINAL REAL - UNTUK SEMUA DOKTER & SEMUA BULAN - BUKAN CUMA 1 DOKTER =====
+# ===== PARSER FINAL REAL =====
 def parse_pdf_real_all(pdf_path):
     doc = fitz.open(pdf_path)
     full_text = ""
@@ -98,11 +137,6 @@ def parse_pdf_real_all(pdf_path):
                     except: pass
             if len(clean) < 13: continue
             try:
-                # UNTUK SEMUA DOKTER - BUKAN CUMA IKHWAN:
-                # clean[0]=Bln (9) -> JANGAN DIPAKAI JADI PASIEN!
-                # clean[4]=CD_Psn per cabang CIK DI TIRO -> INI YANG BENAR UNTUK SEMUA DOKTER!
-                # clean[8]=SA_Psn per cabang SULTAN AGUNG -> INI YANG BENAR UNTUK SEMUA DOKTER!
-                # clean[11]=TOTAL_Pasien total -> INI YANG BENAR UNTUK SEMUA DOKTER!
                 Bln = clean[0]
                 CD_Total = clean[1]
                 CD_Psn_cabang = clean[4]
@@ -131,30 +165,59 @@ def parse_pdf_real_all(pdf_path):
         })
     return df, periode
 
+# ============ HEADER ============
 c_head1, c_head2 = st.columns([6,1])
 with c_head1:
     st.markdown(f'''<div class="gradient-header"><div style="display:flex; align-items:center; gap:18px;"><div style="background:white; border-radius:12px; padding:6px 14px; display:flex; align-items:center;"><span style="color:#dc2626; font-weight:900; font-size:22px; letter-spacing:1px;">PRAMITA</span><span style="color:#dc2626; font-style:italic; margin-left:8px; font-weight:600;">Lab</span></div><div><h1 style="margin:0;font-size:26px; font-weight:800;">MONITORING KINERJA DOKTER</h1><p style="margin:4px 0 0 0;opacity:0.95">V22 Cantik Real All Data - Semua Dokter Real</p></div></div></div>''', unsafe_allow_html=True)
 with c_head2:
     if st.button("🚪 Logout"): st.session_state.authenticated=False; st.rerun()
 
+# ============ AUTO-PULL DARI GITHUB SAAT APP DIBUKA ============
+# Kalau file lokal tidak ada, coba tarik dari GitHub dulu
 if not os.path.exists(DB_FILE):
-    st.info("Upload PDF di sidebar kiri ya kak - Tampilan cantik V18.0")
+    with st.spinner("🔄 Mengambil database terbaru dari GitHub..."):
+        ok, msg = pull_from_github(DB_FILE)
+    if ok:
+        st.success("✅ Database berhasil dipulihkan dari GitHub!")
+    else:
+        # Hanya tampilkan kalau memang tidak ada di GitHub (bukan error token)
+        if "404" in msg or "belum ada" in msg:
+            st.info("📂 Belum ada database. Silakan upload PDF di sidebar kiri ya kak.")
+        else:
+            st.warning(f"⚠️ Gagal ambil dari GitHub: {msg}")
+
+# ============ JIKA TETAP TIDAK ADA FILE -> MODE UPLOAD ============
+if not os.path.exists(DB_FILE):
     with st.sidebar:
         st.markdown("### 📂 Upload PDF Real Semua Data")
         up = st.file_uploader("Pilih PDF", type=["pdf"], accept_multiple_files=True)
         if up and st.button("🔥 REBUILD SEMUA DATA REAL", type="primary", use_container_width=True):
+            # PULL dulu supaya data lama tetap ada
+            pull_from_github(DB_FILE)
             all_df=[]
             for f in up:
                 tmp = f"/tmp/{f.name}"
                 with open(tmp,"wb") as o: o.write(f.getbuffer())
                 d,p = parse_pdf_real_all(tmp)
-                all_df.append(d)
-            final = pd.concat(all_df, ignore_index=True)
-            final.to_excel(DB_FILE, index=False)
-            push_to_github(DB_FILE)
-            st.success("✅ Semua data real!"); st.rerun()
+                if not d.empty: all_df.append(d)
+            if all_df:
+                final = pd.concat(all_df, ignore_index=True)
+                if os.path.exists(DB_FILE):
+                    old = pd.read_excel(DB_FILE)
+                    per_baru = final["Periode"].unique().tolist()
+                    old_f = old[~old["Periode"].isin(per_baru)]
+                    final = pd.concat([old_f, final], ignore_index=True)
+                final.to_excel(DB_FILE, index=False)
+                ok, msg = push_to_github(DB_FILE)
+                if ok:
+                    st.success("✅ Semua data real tersimpan ke GitHub!"); st.rerun()
+                else:
+                    st.error(f"❌ Gagal simpan ke GitHub: {msg}")
+            else:
+                st.error("Tidak ada data terbaca dari PDF.")
     st.stop()
 
+# ============ BACA DATABASE ============
 df=pd.read_excel(DB_FILE); df["Periode"]=df["Periode"].apply(normalize_periode); df["SortDate"]=df["Periode"].apply(parse_date); df=df.sort_values("SortDate")
 df["Kode_Dokter"]=df["Kode_Dokter"].astype(str); df["Tahun"]=df["SortDate"].dt.year
 
@@ -164,23 +227,31 @@ with st.sidebar:
     uploaded_pdfs = st.file_uploader("Upload PDF Semua Bulan (bisa banyak)", type=["pdf"], accept_multiple_files=True, key="upload_all")
     if uploaded_pdfs:
         if st.button("🔥 REBUILD SEMUA DATA REAL", type="primary", use_container_width=True, key="rebuild_all"):
+            # PULL dulu supaya data periode lain tidak hilang
+            pull_from_github(DB_FILE)
             all_dfs=[]
             for pdf_file in uploaded_pdfs:
                 tp = f"/tmp/{pdf_file.name}"
                 with open(tp,"wb") as o: o.write(pdf_file.getbuffer())
                 d,p = parse_pdf_real_all(tp)
                 st.write(f"✅ {pdf_file.name} -> {p}: {len(d)} dokter real")
-                all_dfs.append(d)
+                if not d.empty: all_dfs.append(d)
             if all_dfs:
                 final = pd.concat(all_dfs, ignore_index=True)
-                old = pd.read_excel(DB_FILE)
-                per_baru = final["Periode"].unique().tolist()
-                old_f = old[~old["Periode"].isin(per_baru)]
-                new_db = pd.concat([old_f, final], ignore_index=True)
+                old = pd.read_excel(DB_FILE) if os.path.exists(DB_FILE) else pd.DataFrame()
+                if not old.empty:
+                    per_baru = final["Periode"].unique().tolist()
+                    old_f = old[~old["Periode"].isin(per_baru)]
+                    new_db = pd.concat([old_f, final], ignore_index=True)
+                else:
+                    new_db = final
                 new_db.to_excel(DB_FILE, index=False)
-                push_to_github(DB_FILE)
-                st.success(f"✅ SEMUA DATA REAL! {len(per_baru)} periode, semua dokter, semua menu fix!")
-                st.rerun()
+                ok, msg = push_to_github(DB_FILE)
+                if ok:
+                    st.success(f"✅ SEMUA DATA REAL! {len(final['Periode'].unique())} periode tersimpan ke GitHub!")
+                    st.rerun()
+                else:
+                    st.error(f"❌ Gagal simpan ke GitHub: {msg}")
 
     if os.path.exists("/mnt/data/PENGAMBILAN_DANA_JASA_PRE_ANALISTIK.pdf"):
         if st.button("⚡ FIX CEPAT SEMUA DOKTER SEPT REAL", use_container_width=True):
@@ -189,8 +260,11 @@ with st.sidebar:
             old = old[~old["Periode"].str.contains("SEPTEMBER-2026", na=False)]
             new_db = pd.concat([old, d], ignore_index=True)
             new_db.to_excel(DB_FILE, index=False)
-            push_to_github(DB_FILE)
-            st.success("✅ September semua dokter real!"); st.rerun()
+            ok, msg = push_to_github(DB_FILE)
+            if ok:
+                st.success("✅ September semua dokter real!"); st.rerun()
+            else:
+                st.error(f"❌ Gagal simpan ke GitHub: {msg}")
 
     st.divider()
     st.markdown("### 🔎 Filter - Tampilan Cantik")
